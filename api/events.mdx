@@ -1,0 +1,350 @@
+---
+title: "Events"
+description: "Real-time server-sent events (SSE) for backup operations and system status"
+---
+
+The Events API provides real-time updates about backup operations, volume mounts, and other system activities through Server-Sent Events (SSE). This allows your application to receive live progress updates without polling.
+
+## Connect to event stream
+
+<Note>
+  Authentication is required. The session cookie must be included with the request.
+</Note>
+
+### Request
+
+```bash
+GET /api/v1/events
+```
+
+Opens an SSE connection that streams real-time events.
+
+### Example
+
+```bash
+curl -N -H "Cookie: session=your_session_cookie" \
+  http://localhost:4096/api/v1/events
+```
+
+## Event types
+
+The server broadcasts the following event types:
+
+### Connection events
+
+**`connected`** - Sent immediately upon successful connection
+
+```json
+{
+  "type": "connected",
+  "timestamp": 1709561234567
+}
+```
+
+**`heartbeat`** - Sent every 5 seconds to keep the connection alive
+
+```json
+{
+  "timestamp": 1709561234567
+}
+```
+
+### Backup events
+
+**`backup:started`** - Backup job has begun
+
+```json
+{
+  "organizationId": "org_123",
+  "scheduleId": "sched_abc",
+  "volumeId": 1,
+  "repositoryId": "repo_xyz",
+  "timestamp": 1709561234567
+}
+```
+
+**`backup:progress`** - Real-time backup progress update
+
+```json
+{
+  "organizationId": "org_123",
+  "scheduleId": "sched_abc",
+  "filesProcessed": 1250,
+  "bytesProcessed": 52428800,
+  "totalFiles": 5000,
+  "percentComplete": 25.5,
+  "currentFile": "/data/documents/report.pdf",
+  "timestamp": 1709561234567
+}
+```
+
+**`backup:completed`** - Backup job finished successfully
+
+```json
+{
+  "organizationId": "org_123",
+  "scheduleId": "sched_abc",
+  "status": "success",
+  "filesProcessed": 5000,
+  "bytesProcessed": 209715200,
+  "duration": 3600000,
+  "snapshotId": "a1b2c3d4",
+  "timestamp": 1709561234567
+}
+```
+
+### Volume events
+
+**`volume:mounted`** - Volume successfully mounted
+
+```json
+{
+  "organizationId": "org_123",
+  "volumeId": 1,
+  "volumeName": "Production Data",
+  "timestamp": 1709561234567
+}
+```
+
+**`volume:unmounted`** - Volume unmounted
+
+```json
+{
+  "organizationId": "org_123",
+  "volumeId": 1,
+  "volumeName": "Production Data",
+  "timestamp": 1709561234567
+}
+```
+
+**`volume:updated`** - Volume configuration changed
+
+```json
+{
+  "organizationId": "org_123",
+  "volumeId": 1,
+  "timestamp": 1709561234567
+}
+```
+
+### Mirror events
+
+**`mirror:started`** - Mirror replication job started
+
+```json
+{
+  "organizationId": "org_123",
+  "scheduleId": "sched_abc",
+  "sourceRepositoryId": "repo_source",
+  "targetRepositoryId": "repo_target",
+  "timestamp": 1709561234567
+}
+```
+
+**`mirror:completed`** - Mirror replication finished
+
+```json
+{
+  "organizationId": "org_123",
+  "scheduleId": "sched_abc",
+  "status": "success",
+  "snapshotsCopied": 10,
+  "timestamp": 1709561234567
+}
+```
+
+### Restore events
+
+**`restore:started`** - Restore operation initiated
+
+```json
+{
+  "organizationId": "org_123",
+  "repositoryId": "repo_xyz",
+  "snapshotId": "a1b2c3d4",
+  "timestamp": 1709561234567
+}
+```
+
+**`restore:progress`** - Restore progress update
+
+```json
+{
+  "organizationId": "org_123",
+  "filesRestored": 500,
+  "bytesRestored": 20971520,
+  "percentComplete": 15.5,
+  "timestamp": 1709561234567
+}
+```
+
+**`restore:completed`** - Restore operation finished
+
+```json
+{
+  "organizationId": "org_123",
+  "filesRestored": 3000,
+  "bytesRestored": 125829120,
+  "duration": 1800000,
+  "status": "success",
+  "timestamp": 1709561234567
+}
+```
+
+### Dump events
+
+**`dump:started`** - Snapshot dump (download) started
+
+```json
+{
+  "organizationId": "org_123",
+  "repositoryId": "repo_xyz",
+  "snapshotId": "a1b2c3d4",
+  "timestamp": 1709561234567
+}
+```
+
+### Doctor events
+
+**`doctor:started`** - Repository health check/repair started
+
+```json
+{
+  "organizationId": "org_123",
+  "repositoryId": "repo_xyz",
+  "operation": "check",
+  "timestamp": 1709561234567
+}
+```
+
+**`doctor:completed`** - Doctor operation finished
+
+```json
+{
+  "organizationId": "org_123",
+  "repositoryId": "repo_xyz",
+  "status": "success",
+  "errors": [],
+  "timestamp": 1709561234567
+}
+```
+
+**`doctor:cancelled`** - Doctor operation was cancelled
+
+```json
+{
+  "organizationId": "org_123",
+  "repositoryId": "repo_xyz",
+  "timestamp": 1709561234567
+}
+```
+
+## Organization scoping
+
+All events are scoped to your organization. You will only receive events for resources belonging to your active organization. Events from other organizations are automatically filtered out.
+
+## Implementation example
+
+### JavaScript/TypeScript
+
+```javascript
+const eventSource = new EventSource('/api/v1/events', {
+  withCredentials: true
+});
+
+// Connection established
+eventSource.addEventListener('connected', (event) => {
+  const data = JSON.parse(event.data);
+  console.log('Connected at:', new Date(data.timestamp));
+});
+
+// Backup progress
+eventSource.addEventListener('backup:progress', (event) => {
+  const data = JSON.parse(event.data);
+  console.log(`Backup progress: ${data.percentComplete.toFixed(1)}%`);
+  console.log(`Processing: ${data.currentFile}`);
+});
+
+// Backup completed
+eventSource.addEventListener('backup:completed', (event) => {
+  const data = JSON.parse(event.data);
+  console.log(`Backup ${data.status}: ${data.filesProcessed} files, ${data.bytesProcessed} bytes`);
+});
+
+// Handle errors
+eventSource.onerror = (error) => {
+  console.error('SSE connection error:', error);
+  eventSource.close();
+};
+```
+
+### React example
+
+```jsx
+import { useEffect, useState } from 'react';
+
+function BackupMonitor() {
+  const [backupProgress, setBackupProgress] = useState(null);
+
+  useEffect(() => {
+    const eventSource = new EventSource('/api/v1/events', {
+      withCredentials: true
+    });
+
+    eventSource.addEventListener('backup:progress', (event) => {
+      const data = JSON.parse(event.data);
+      setBackupProgress(data);
+    });
+
+    eventSource.addEventListener('backup:completed', (event) => {
+      const data = JSON.parse(event.data);
+      console.log('Backup completed:', data);
+      setBackupProgress(null);
+    });
+
+    return () => {
+      eventSource.close();
+    };
+  }, []);
+
+  return (
+    <div>
+      {backupProgress && (
+        <div>
+          <div>Progress: {backupProgress.percentComplete.toFixed(1)}%</div>
+          <div>Files: {backupProgress.filesProcessed} / {backupProgress.totalFiles}</div>
+          <div>Current: {backupProgress.currentFile}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Connection management
+
+- The server sends a **heartbeat** event every 5 seconds to keep the connection alive
+- Connections are automatically closed when the client disconnects or the session expires
+- Implement reconnection logic in your client to handle network interruptions
+- Each client only receives events for their own organization
+
+## Notes
+
+<Warning>
+  The Events API requires an active authenticated session. Unauthenticated requests will be rejected.
+</Warning>
+
+<Tip>
+  Use the Events API to build real-time dashboards that show backup progress, system status, and operation history without polling.
+</Tip>
+
+## Related endpoints
+
+<CardGroup cols={2}>
+  <Card title="Backups" icon="calendar-days" href="/api/backups">
+    Manage backup schedules
+  </Card>
+  <Card title="Repositories" icon="database" href="/api/repositories">
+    Repository operations
+  </Card>
+</CardGroup>

@@ -93,6 +93,7 @@
               "api/backups",
               "api/snapshots",
               "api/notifications",
+              "api/events",
               "api/system"
             ]
           }
