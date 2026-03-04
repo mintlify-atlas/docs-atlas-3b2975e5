@@ -1,0 +1,114 @@
+{
+  "projectType": "saas",
+  "projectName": "Zerobyte",
+  "projectDescription": "Backup automation platform for self-hosters built on top of Restic with encrypted, scheduled backups",
+  "theme": "aspen",
+  "primaryColor": "#94cb04",
+  "lightColor": "#545454",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/volumes",
+              "concepts/repositories",
+              "concepts/backups",
+              "concepts/retention-policies"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment-variables",
+              "configuration/docker-setup",
+              "configuration/security",
+              "configuration/authentication"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/adding-volumes",
+              "guides/creating-repositories",
+              "guides/backup-jobs",
+              "guides/restoring-data",
+              "guides/notifications"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/rclone-integration",
+              "advanced/cli-commands",
+              "advanced/organizations",
+              "advanced/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/introduction",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/volumes",
+              "api/repositories",
+              "api/backups",
+              "api/snapshots",
+              "api/notifications",
+              "api/system"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Automated encrypted backups powered by Restic",
+    "Multi-protocol volume support (NFS, SMB, WebDAV, SFTP, local directories)",
+    "Multiple storage backends (S3, Azure, GCS, local, rclone with 40+ providers)",
+    "Flexible scheduling with cron expressions and retention policies",
+    "Snapshot browsing and file-level restoration",
+    "Organization and team management",
+    "Notification system for backup events",
+    "Web-based dashboard and REST API"
+  ],
+  "publicApiSurface": [
+    "GET /api/v1/volumes - List volumes",
+    "POST /api/v1/volumes - Create volume",
+    "GET /api/v1/repositories - List repositories",
+    "POST /api/v1/repositories - Create repository",
+    "GET /api/v1/backups - List backup schedules",
+    "POST /api/v1/backups - Create backup schedule",
+    "POST /api/v1/backups/:id/run - Execute backup now",
+    "GET /api/v1/repositories/:id/snapshots - List snapshots",
+    "POST /api/v1/repositories/:id/snapshots/:snapshotId/restore - Restore snapshot",
+    "GET /api/v1/notifications - List notifications",
+    "POST /api/v1/notifications - Create notification",
+    "GET /api/v1/system/capabilities - Check system capabilities",
+    "zerobyte reset-password - CLI command to reset user password",
+    "zerobyte disable-2fa - CLI command to disable two-factor authentication",
+    "zerobyte change-username - CLI command to change username",
+    "zerobyte change-email - CLI command to change email"
+  ]
+}
