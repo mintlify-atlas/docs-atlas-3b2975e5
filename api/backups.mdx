@@ -1,0 +1,509 @@
+---
+title: Backups
+description: Manage backup schedules and execute backups
+---
+
+Backup schedules define automated backup jobs with retention policies, inclusion/exclusion patterns, and cron scheduling.
+
+## List Backup Schedules
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/backups \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Retrieve all backup schedules.
+
+**Response:**
+
+<ResponseField name="schedules" type="array">
+  <Expandable>
+    <ResponseField name="id" type="number">
+      Schedule ID
+    </ResponseField>
+    <ResponseField name="shortId" type="string">
+      Short identifier for URLs
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Schedule name
+    </ResponseField>
+    <ResponseField name="volumeId" type="number">
+      Source volume ID
+    </ResponseField>
+    <ResponseField name="repositoryId" type="string">
+      Target repository ID
+    </ResponseField>
+    <ResponseField name="enabled" type="boolean">
+      Whether schedule is active
+    </ResponseField>
+    <ResponseField name="cronExpression" type="string">
+      Cron expression for scheduling
+    </ResponseField>
+    <ResponseField name="retentionPolicy" type="object | null">
+      Snapshot retention policy
+    </ResponseField>
+    <ResponseField name="excludePatterns" type="string[] | null">
+      File patterns to exclude
+    </ResponseField>
+    <ResponseField name="excludeIfPresent" type="string[] | null">
+      Exclude directories containing these files
+    </ResponseField>
+    <ResponseField name="includePatterns" type="string[] | null">
+      File patterns to include (overrides excludes)
+    </ResponseField>
+    <ResponseField name="oneFileSystem" type="boolean">
+      Don't cross filesystem boundaries
+    </ResponseField>
+    <ResponseField name="lastBackupAt" type="number | null">
+      Unix timestamp of last backup
+    </ResponseField>
+    <ResponseField name="lastBackupStatus" type="string | null">
+      Last backup status: "success", "error", "in_progress", "warning"
+    </ResponseField>
+    <ResponseField name="lastBackupError" type="string | null">
+      Last backup error message
+    </ResponseField>
+    <ResponseField name="nextBackupAt" type="number | null">
+      Unix timestamp of next scheduled backup
+    </ResponseField>
+    <ResponseField name="createdAt" type="number">
+      Unix timestamp in milliseconds
+    </ResponseField>
+    <ResponseField name="updatedAt" type="number">
+      Unix timestamp in milliseconds
+    </ResponseField>
+    <ResponseField name="volume" type="object">
+      Associated volume object
+    </ResponseField>
+    <ResponseField name="repository" type="object">
+      Associated repository object
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Create Backup Schedule
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/backups \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Daily Database Backup",
+    "volumeId": "abc123",
+    "repositoryId": "xyz789",
+    "enabled": true,
+    "cronExpression": "0 2 * * *",
+    "retentionPolicy": {
+      "keepDaily": 7,
+      "keepWeekly": 4,
+      "keepMonthly": 6
+    },
+    "excludePatterns": ["*.tmp", "*.cache"],
+    "oneFileSystem": true
+  }'
+```
+</CodeGroup>
+
+Create a new backup schedule.
+
+**Request Body:**
+
+<ParamField body="name" type="string" required>
+  Schedule name (1-128 characters)
+</ParamField>
+
+<ParamField body="volumeId" type="string | number" required>
+  Source volume ID or shortId
+</ParamField>
+
+<ParamField body="repositoryId" type="string" required>
+  Target repository ID or shortId
+</ParamField>
+
+<ParamField body="enabled" type="boolean" required>
+  Whether schedule is active
+</ParamField>
+
+<ParamField body="cronExpression" type="string" required>
+  Cron expression (e.g., "0 2 * * *" for 2 AM daily)
+</ParamField>
+
+<ParamField body="retentionPolicy" type="object">
+  Snapshot retention policy
+  <Expandable>
+    <ParamField body="keepLast" type="number">
+      Keep last N snapshots
+    </ParamField>
+    <ParamField body="keepHourly" type="number">
+      Keep N hourly snapshots
+    </ParamField>
+    <ParamField body="keepDaily" type="number">
+      Keep N daily snapshots
+    </ParamField>
+    <ParamField body="keepWeekly" type="number">
+      Keep N weekly snapshots
+    </ParamField>
+    <ParamField body="keepMonthly" type="number">
+      Keep N monthly snapshots
+    </ParamField>
+    <ParamField body="keepYearly" type="number">
+      Keep N yearly snapshots
+    </ParamField>
+    <ParamField body="keepWithinDuration" type="string">
+      Keep snapshots within duration (e.g., "30d", "1y")
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="excludePatterns" type="string[]">
+  File patterns to exclude (glob patterns)
+</ParamField>
+
+<ParamField body="excludeIfPresent" type="string[]">
+  Exclude directories containing these files
+</ParamField>
+
+<ParamField body="includePatterns" type="string[]">
+  File patterns to include (overrides excludes)
+</ParamField>
+
+<ParamField body="oneFileSystem" type="boolean">
+  Don't cross filesystem boundaries
+</ParamField>
+
+<ParamField body="tags" type="string[]">
+  Tags to apply to snapshots
+</ParamField>
+
+**Response:** Returns the created schedule object (without volume/repository nested objects).
+
+## Get Backup Schedule
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/backups/{shortId} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get details for a specific backup schedule.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Schedule short ID
+</ParamField>
+
+**Response:** Returns the schedule object (same structure as list response).
+
+## Update Backup Schedule
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH http://localhost:4096/api/v1/backups/{shortId} \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": false,
+    "cronExpression": "0 3 * * *"
+  }'
+```
+</CodeGroup>
+
+Update a backup schedule.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Schedule short ID
+</ParamField>
+
+**Request Body:** Same fields as create (all optional).
+
+**Response:** Returns the updated schedule object.
+
+## Delete Backup Schedule
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:4096/api/v1/backups/{shortId} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Delete a backup schedule.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Schedule short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="success" type="boolean">
+  Whether deletion succeeded
+</ResponseField>
+
+## Run Backup Now
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/backups/{shortId}/run \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Trigger a backup immediately (ignores schedule).
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Schedule short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="success" type="boolean">
+  Whether backup was started
+</ResponseField>
+
+## Stop Running Backup
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/backups/{shortId}/stop \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Stop a backup that is currently in progress.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Schedule short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="success" type="boolean">
+  Whether backup was stopped
+</ResponseField>
+
+## Run Retention Policy
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/backups/{shortId}/forget \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Manually apply retention policy to clean up old snapshots.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Schedule short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="success" type="boolean">
+  Whether retention policy was applied
+</ResponseField>
+
+## Get Backup Progress
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/backups/{shortId}/progress \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get real-time progress for a running backup.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Schedule short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="percentDone" type="number | null">
+  Backup progress percentage (0-100), or null if not available
+</ResponseField>
+
+<ResponseField name="bytesProcessed" type="number | null">
+  Bytes processed so far
+</ResponseField>
+
+<ResponseField name="totalBytes" type="number | null">
+  Total bytes to process
+</ResponseField>
+
+<ResponseField name="filesProcessed" type="number | null">
+  Files processed so far
+</ResponseField>
+
+<ResponseField name="totalFiles" type="number | null">
+  Total files to process
+</ResponseField>
+
+## Reorder Backup Schedules
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/backups/reorder \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scheduleShortIds": ["abc123", "def456", "ghi789"]
+  }'
+```
+</CodeGroup>
+
+Reorder backup schedules by providing an array in desired order.
+
+**Request Body:**
+
+<ParamField body="scheduleShortIds" type="string[]" required>
+  Array of schedule short IDs in desired order
+</ParamField>
+
+**Response:**
+
+<ResponseField name="success" type="boolean">
+  Whether reordering succeeded
+</ResponseField>
+
+## Get Schedule Mirrors
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/backups/{shortId}/mirrors \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get mirror repository assignments for a backup schedule (for multi-repository replication).
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Schedule short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="mirrors" type="array">
+  Mirror repository assignments
+  <Expandable>
+    <ResponseField name="scheduleId" type="string">
+      Schedule ID
+    </ResponseField>
+    <ResponseField name="repositoryId" type="string">
+      Mirror repository ID
+    </ResponseField>
+    <ResponseField name="enabled" type="boolean">
+      Whether mirroring is enabled
+    </ResponseField>
+    <ResponseField name="lastCopyAt" type="number | null">
+      Unix timestamp of last mirror copy
+    </ResponseField>
+    <ResponseField name="lastCopyStatus" type="string | null">
+      Last copy status: "success", "error", "in_progress"
+    </ResponseField>
+    <ResponseField name="lastCopyError" type="string | null">
+      Last copy error message
+    </ResponseField>
+    <ResponseField name="createdAt" type="number">
+      Unix timestamp
+    </ResponseField>
+    <ResponseField name="repository" type="object">
+      Repository details
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Update Schedule Mirrors
+
+<CodeGroup>
+```bash cURL
+curl -X PUT http://localhost:4096/api/v1/backups/{shortId}/mirrors \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mirrors": [
+      {
+        "repositoryId": "repo123",
+        "enabled": true
+      }
+    ]
+  }'
+```
+</CodeGroup>
+
+Update mirror repository assignments.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Schedule short ID
+</ParamField>
+
+**Request Body:**
+
+<ParamField body="mirrors" type="array" required>
+  Mirror assignments
+  <Expandable>
+    <ParamField body="repositoryId" type="string" required>
+      Repository ID to mirror to
+    </ParamField>
+    <ParamField body="enabled" type="boolean" required>
+      Whether mirroring is enabled
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Response:** Returns updated mirror assignments array.
+
+## Get Mirror Compatibility
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/backups/{shortId}/mirrors/compatibility \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Check which repositories are compatible for mirroring with this schedule.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Schedule short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="repositories" type="array">
+  Repository compatibility status
+  <Expandable>
+    <ResponseField name="repositoryId" type="string">
+      Repository ID
+    </ResponseField>
+    <ResponseField name="compatible" type="boolean">
+      Whether repository is compatible
+    </ResponseField>
+    <ResponseField name="reason" type="string | null">
+      Reason if incompatible
+    </ResponseField>
+  </Expandable>
+</ResponseField>

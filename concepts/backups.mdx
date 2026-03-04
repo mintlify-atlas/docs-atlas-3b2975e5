@@ -1,0 +1,585 @@
+---
+title: "Backups"
+description: "Understand backup schedules, cron expressions, execution, and how Zerobyte orchestrates automated protection"
+---
+
+## What are backups?
+
+Backups in Zerobyte are scheduled jobs that automatically create encrypted snapshots of your volumes and store them in repositories. Each backup job connects a source (volume) to a destination (repository) and runs on a schedule defined by a cron expression.
+
+A backup job encapsulates:
+
+- **What to back up** - The volume (source data)
+- **Where to store it** - The primary repository (and optional mirrors)
+- **When to run** - Cron-based schedule
+- **What to keep** - Retention policy
+- **What to include/exclude** - File patterns and filters
+- **Who to notify** - Alert destinations for success/failure
+
+## Why backup schedules matter
+
+Manual backups are error-prone and easily forgotten. Scheduled backups ensure:
+
+### Consistency
+
+Backups run at predictable intervals (hourly, daily, weekly) without human intervention. You define the schedule once and Zerobyte handles execution.
+
+### Automation
+
+The entire backup lifecycle is automated:
+1. Volume health verification
+2. Snapshot creation
+3. Retention policy application
+4. Mirror synchronization
+5. Notifications
+
+### Granular control
+
+Each backup schedule can have unique:
+- Cron timing
+- Inclusion/exclusion patterns
+- Retention rules
+- Mirror repositories
+- Notification settings
+
+This allows you to optimize backup frequency and retention for different data types.
+
+### Visibility
+
+Every backup execution is tracked with:
+- Start and completion timestamps
+- Success/warning/error status
+- Detailed progress events (files processed, bytes transferred)
+- Error messages for failures
+
+## Backup lifecycle
+
+Each scheduled backup execution follows this flow:
+
+```
+Scheduled → Validation → Execution → Retention → Mirroring → Notification
+                ↓
+              Error → Retry (next schedule)
+```
+
+### Validation phase
+
+Before backup execution, Zerobyte validates:
+
+1. **Schedule enabled** - Disabled schedules are skipped (unless manually triggered)
+2. **Not already running** - Prevents duplicate executions
+3. **Volume exists** - Schedule references a valid volume
+4. **Repository exists** - Schedule references a valid repository
+5. **Volume mounted** - Source must be accessible
+
+If validation fails, the backup is marked as error and notifications are sent.
+
+### Execution phase
+
+During execution:
+
+1. **Lock acquisition** - Repository receives a shared lock (allows concurrent backups, blocks maintenance)
+2. **Restic invocation** - `restic backup` runs with configured options
+3. **Progress streaming** - Real-time progress events via server-sent events (SSE)
+4. **Status tracking** - `lastBackupStatus` updated to `in_progress`
+
+### Post-backup phase
+
+After successful backup:
+
+1. **Retention application** - `restic forget` removes old snapshots based on policy
+2. **Mirror synchronization** - Snapshots copied to mirror repositories
+3. **Cache invalidation** - Repository caches cleared to reflect new snapshots
+4. **Next run calculation** - `nextBackupAt` computed from cron expression
+5. **Notifications sent** - Success/warning/failure alerts delivered
+
+## Cron expressions
+
+Backup schedules use cron expressions to define when backups run. Zerobyte uses standard cron syntax:
+
+```
+┌───────────── minute (0 - 59)
+│ ┌───────────── hour (0 - 23)
+│ │ ┌───────────── day of month (1 - 31)
+│ │ │ ┌───────────── month (1 - 12)
+│ │ │ │ ┌───────────── day of week (0 - 6) (Sunday to Saturday)
+│ │ │ │ │
+│ │ │ │ │
+* * * * *
+```
+
+### Common patterns
+
+<AccordionGroup>
+  <Accordion title="Every hour" icon="clock">
+    ```
+    0 * * * *
+    ```
+    Runs at the top of every hour (00:00, 01:00, 02:00, ...)
+  </Accordion>
+
+  <Accordion title="Daily at 2 AM" icon="moon">
+    ```
+    0 2 * * *
+    ```
+    Runs every day at 02:00. Common for nightly backups.
+  </Accordion>
+
+  <Accordion title="Every 6 hours" icon="clock-rotate-left">
+    ```
+    0 */6 * * *
+    ```
+    Runs at 00:00, 06:00, 12:00, 18:00 daily.
+  </Accordion>
+
+  <Accordion title="Weekdays at 6 PM" icon="briefcase">
+    ```
+    0 18 * * 1-5
+    ```
+    Runs Monday through Friday at 18:00.
+  </Accordion>
+
+  <Accordion title="Weekly on Sunday" icon="calendar-week">
+    ```
+    0 3 * * 0
+    ```
+    Runs every Sunday at 03:00.
+  </Accordion>
+
+  <Accordion title="Monthly on the 1st" icon="calendar">
+    ```
+    0 1 1 * *
+    ```
+    Runs on the first day of each month at 01:00.
+  </Accordion>
+
+  <Accordion title="Every 15 minutes" icon="stopwatch">
+    ```
+    */15 * * * *
+    ```
+    Runs at :00, :15, :30, :45 of every hour. Use with caution.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+Use [crontab.guru](https://crontab.guru) to validate and understand cron expressions before saving them in Zerobyte.
+</Tip>
+
+### Next run calculation
+
+Zerobyte automatically calculates `nextBackupAt` using the cron expression and the system timezone. This value:
+
+- Updates after each backup completes
+- Accounts for the server's timezone
+- Determines when the scheduler triggers the next execution
+
+## Inclusion and exclusion patterns
+
+Fine-tune what gets backed up using include and exclude patterns.
+
+### Exclude patterns
+
+Specify paths or glob patterns to skip during backup:
+
+```json
+{
+  "excludePatterns": [
+    "/tmp/**",
+    "*.log",
+    "/cache/*",
+    "!important.log"
+  ]
+}
+```
+
+**Pattern rules:**
+- Paths starting with `/` are relative to the volume root
+- Paths without `/` are matched anywhere in the tree
+- Glob patterns supported: `*`, `**`, `?`, `[...]`
+- Prefix with `!` to negate (include despite other exclusions)
+
+**Common exclusions:**
+- Temporary files: `*.tmp`, `/tmp/**`
+- Caches: `/var/cache/**`, `node_modules/**`, `.cache/**`
+- Logs: `*.log`, `/var/log/**`
+- OS files: `.DS_Store`, `Thumbs.db`, `desktop.ini`
+
+### Include patterns
+
+Explicitly specify what to back up (everything else is excluded):
+
+```json
+{
+  "includePatterns": [
+    "/data/important/**",
+    "/configs/*.yaml"
+  ]
+}
+```
+
+<Warning>
+When include patterns are set, **only** matching files are backed up. Use include patterns for targeted backups of specific subdirectories.
+</Warning>
+
+### Exclude if present
+
+Skip directories containing specific marker files:
+
+```json
+{
+  "excludeIfPresent": [
+    ".nobackup",
+    "SKIP_BACKUP.txt"
+  ]
+}
+```
+
+If Zerobyte finds `.nobackup` in a directory, that entire directory (and subdirectories) are excluded.
+
+**Use cases:**
+- Let developers mark cache directories with `.nobackup`
+- Exclude build artifacts by placing `SKIP_BACKUP.txt` in `target/` or `dist/`
+
+### One file system
+
+The `oneFileSystem` flag restricts backups to a single filesystem:
+
+```json
+{
+  "oneFileSystem": true
+}
+```
+
+When enabled:
+- Mount points encountered during traversal are not crossed
+- Prevents backing up accidentally mounted filesystems
+- Useful for NFS volumes where subdirectories might be remote mounts
+
+<Tip>
+Enable `oneFileSystem` when backing up `/` or other system paths to avoid traversing into `/dev`, `/proc`, `/sys`, etc.
+</Tip>
+
+## How backups work in Zerobyte
+
+### Scheduler
+
+Zerobyte runs a background scheduler that:
+
+1. Polls `backupSchedulesTable` every minute
+2. Finds schedules where `nextBackupAt <= now` and `enabled = true`
+3. Calls `executeBackup()` for each due schedule
+4. Continues running even if individual backups fail
+
+The scheduler is resilient to crashes — on restart, overdue backups are immediately queued.
+
+### Backup execution
+
+The `executeBackup()` function orchestrates the backup:
+
+```typescript
+// Simplified flow from backups.execution.ts
+async function executeBackup(scheduleId: number, manual = false) {
+  // 1. Validate
+  const validation = await validateBackupExecution(scheduleId, manual);
+  if (validation.type !== "success") {
+    return handleValidationResult(scheduleId, validation);
+  }
+
+  const { schedule, volume, repository, organizationId } = validation.context;
+
+  // 2. Emit started event
+  serverEvents.emit("backup:started", ...);
+
+  // 3. Update status to in_progress
+  await scheduleQueries.updateStatus(scheduleId, organizationId, {
+    lastBackupStatus: "in_progress",
+  });
+
+  // 4. Acquire repository lock
+  const releaseBackupLock = await repoMutex.acquireShared(repository.id, "backup");
+
+  try {
+    // 5. Run restic backup
+    const result = await restic.backup(repository.config, volumePath, {
+      tags: [schedule.shortId],
+      exclude: schedule.excludePatterns,
+      include: schedule.includePatterns,
+      oneFileSystem: schedule.oneFileSystem,
+      compressionMode: repository.compressionMode,
+      onProgress: (progress) => {
+        serverEvents.emit("backup:progress", ...);
+      },
+    });
+
+    // 6. Apply retention policy
+    if (schedule.retentionPolicy) {
+      await runForget(scheduleId);
+    }
+
+    // 7. Copy to mirrors
+    await copyToMirrors(scheduleId, repository, schedule.retentionPolicy);
+
+    // 8. Update status to success
+    await scheduleQueries.updateStatus(scheduleId, organizationId, {
+      lastBackupStatus: result.exitCode === 0 ? "success" : "warning",
+      lastBackupAt: Date.now(),
+      nextBackupAt: calculateNextRun(schedule.cronExpression),
+    });
+
+    // 9. Emit completed event
+    serverEvents.emit("backup:completed", { status: "success", ... });
+
+  } catch (error) {
+    // Handle failure
+    await scheduleQueries.updateStatus(scheduleId, organizationId, {
+      lastBackupStatus: "error",
+      lastBackupError: toMessage(error),
+    });
+    serverEvents.emit("backup:completed", { status: "error", ... });
+  } finally {
+    releaseBackupLock();
+  }
+}
+```
+
+### Progress tracking
+
+During backup, Restic emits progress events that Zerobyte streams to the UI:
+
+```typescript
+{
+  percentDone: 45.2,
+  filesProcessed: 1234,
+  bytesProcessed: 567890123,
+  totalFiles: 2730,
+  totalBytes: 1256000000,
+  currentFile: "/data/photos/IMG_1234.jpg"
+}
+```
+
+Progress is cached in-memory and accessible via `getBackupProgress(scheduleId)` for the frontend to display real-time status.
+
+### Restic tags
+
+Every snapshot created by a backup schedule is tagged with the schedule's `shortId`. This enables:
+
+- **Filtering snapshots** by backup schedule
+- **Targeted retention** (forget only affects snapshots with the schedule's tag)
+- **Restore history** (see which schedule created each snapshot)
+
+Tags are immutable and automatically applied by Zerobyte.
+
+## Retention policies
+
+See [Retention Policies](/concepts/retention-policies) for a detailed explanation of how snapshots are pruned based on age and count.
+
+## Mirror repositories
+
+Mirror repositories provide redundancy by copying snapshots to additional storage locations.
+
+### How mirrors work
+
+1. Primary backup completes successfully to the main repository
+2. For each enabled mirror:
+   - Acquire locks on source and mirror repositories
+   - Run `restic copy` to transfer snapshots matching the schedule's tag
+   - Apply retention policy to the mirror (if configured)
+   - Update mirror status and timestamps
+
+### Mirror compatibility
+
+Not all repository backends are compatible for mirroring. Zerobyte checks compatibility before allowing mirror configuration:
+
+**Compatible pairs:**
+- Local ↔ Local
+- S3-compatible ↔ S3-compatible (S3, R2, MinIO, etc.)
+- Any ↔ REST server
+- Rclone ↔ Rclone (if backends match)
+
+**Incompatible pairs:**
+- S3 ↔ Azure (different authentication mechanisms)
+- GCS ↔ SFTP (protocol mismatch)
+
+<Note>
+Compatibility is determined by whether Restic can authenticate to both repositories in a single copy operation.
+</Note>
+
+### Mirror status tracking
+
+Each mirror tracks:
+- `lastCopyAt` - When the last copy operation ran
+- `lastCopyStatus` - "success", "error", or "in_progress"
+- `lastCopyError` - Error message if copy failed
+
+Mirrors can fail independently of the primary backup. A failed mirror copy does not mark the backup as failed.
+
+## Backup status states
+
+<Steps>
+  <Step title="Success">
+    Backup completed without errors. All files were processed and stored successfully.
+  </Step>
+  <Step title="Warning">
+    Backup completed but Restic exited with a non-zero code. Common causes:
+    - Some files were unreadable (permission errors)
+    - File changed during backup (common for active databases)
+    
+    Check the backup summary for details.
+  </Step>
+  <Step title="Error">
+    Backup failed to complete. Possible causes:
+    - Volume unmounted during backup
+    - Repository unreachable
+    - Insufficient storage space
+    - Network timeout
+    
+    `lastBackupError` contains the error message.
+  </Step>
+  <Step title="In Progress">
+    Backup is currently running. Progress events are being emitted.
+  </Step>
+</Steps>
+
+## Manual backups
+
+Backups can be triggered manually via the UI or API, bypassing the schedule:
+
+```bash
+POST /api/backups/:scheduleId/execute
+```
+
+Manual backups:
+- Run immediately regardless of `nextBackupAt`
+- Ignore the `enabled` flag (run even if schedule is disabled)
+- Update `lastBackupAt` and `nextBackupAt` as normal
+- Count toward the retention policy
+
+<Tip>
+Use manual backups to create a snapshot before risky operations like database migrations or major updates.
+</Tip>
+
+## Stopping backups
+
+In-progress backups can be stopped via:
+
+```bash
+POST /api/backups/:scheduleId/stop
+```
+
+Stopping a backup:
+1. Aborts the Restic process via signal
+2. Releases the repository lock
+3. Sets status to "warning" with error "Backup was stopped by user"
+4. May leave partial snapshot data (cleaned up by next prune/doctor)
+
+<Warning>
+Force-stopping backups can leave repositories in an inconsistent state. Use the unlock operation if the repository remains locked.
+</Warning>
+
+## Database schema
+
+Backup schedules are stored in `backup_schedules_table`:
+
+```typescript
+{
+  id: number,                    // Auto-increment primary key
+  shortId: string,               // Human-friendly unique identifier
+  name: string,                  // Display name
+  volumeId: number,              // Foreign key to volumes_table
+  repositoryId: string,          // Foreign key to repositories_table
+  enabled: boolean,              // Schedule active
+  cronExpression: string,        // Cron schedule
+  retentionPolicy: RetentionPolicy | null,
+  excludePatterns: string[],
+  excludeIfPresent: string[],
+  includePatterns: string[],
+  oneFileSystem: boolean,
+  lastBackupAt: number | null,
+  lastBackupStatus: "success" | "error" | "in_progress" | "warning" | null,
+  lastBackupError: string | null,
+  nextBackupAt: number | null,
+  sortOrder: number,             // UI display order
+  organizationId: string,
+  createdAt: number,
+  updatedAt: number
+}
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Schedule backups during off-peak hours">
+    Run resource-intensive backups when system load is low:
+    - Databases: After business hours (e.g., `0 2 * * *`)
+    - File servers: Overnight or early morning
+    - Production systems: Consider read-only hours or maintenance windows
+  </Accordion>
+
+  <Accordion title="Use specific exclusion patterns">
+    Exclude temporary and cache data to reduce:
+    - Backup time
+    - Storage costs
+    - Repository size
+    
+    Common patterns:
+    ```
+    *.tmp
+    *.log
+    /tmp/**
+    /var/cache/**
+    node_modules/**
+    .git/objects/**
+    ```
+  </Accordion>
+
+  <Accordion title="Test restore procedures">
+    Regularly verify backups are restorable:
+    1. Pick a random snapshot
+    2. Restore to a test location
+    3. Verify data integrity
+    4. Document recovery time
+  </Accordion>
+
+  <Accordion title="Monitor backup health">
+    Set up alerts for:
+    - Backups that haven't completed in 24 hours
+    - Consistent backup failures (3+ in a row)
+    - Sudden changes in backup size or duration
+  </Accordion>
+
+  <Accordion title="Combine with retention policies">
+    Don't just create backups — define how long to keep them:
+    - Critical data: Keep daily for 30 days, weekly for 1 year
+    - Development data: Keep last 7 days only
+    - Archives: Keep yearly snapshots indefinitely
+  </Accordion>
+
+  <Accordion title="Use mirrors for critical data">
+    Configure mirror repositories to protect against:
+    - Cloud provider outages
+    - Regional disasters
+    - Accidental repository deletion
+    
+    Store mirrors in different:
+    - Geographic regions
+    - Cloud providers
+    - Storage tiers (hot primary, cold mirror)
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Retention policies" icon="clock-rotate-left" href="/concepts/retention-policies">
+    Learn how to configure snapshot retention rules
+  </Card>
+  <Card title="Restoring data" icon="rotate-left" href="/guides/restoring-data">
+    Recover files and directories from snapshots
+  </Card>
+  <Card title="Backup job setup" icon="calendar-days" href="/guides/backup-jobs">
+    Step-by-step guide to creating backup schedules
+  </Card>
+  <Card title="Notifications" icon="bell" href="/guides/notifications">
+    Configure alerts for backup success and failure
+  </Card>
+</CardGroup>

@@ -1,0 +1,626 @@
+---
+title: Authentication
+description: User authentication, SSO, two-factor authentication, and organizations
+---
+
+Zerobyte uses [better-auth](https://github.com/better-auth/better-auth) for authentication and session management. It supports email/password authentication, SSO, two-factor authentication, and organization-based access control.
+
+## Authentication System
+
+Zerobyte's authentication is built on better-auth and includes:
+
+- **Email and password** - Traditional username/email + password authentication
+- **SSO** - SAML 2.0 and OIDC-based single sign-on
+- **Two-factor authentication** - TOTP-based 2FA with backup codes
+- **Organizations** - Multi-tenant organization support
+- **Session management** - Secure, encrypted sessions
+- **Account linking** - Link multiple auth methods to one account
+
+## First User Setup
+
+When you first access Zerobyte, you'll be prompted to create an account.
+
+**First user privileges:**
+
+- Automatically assigned **admin** role
+- Can configure SSO providers
+- Can enable/disable user registration
+- Becomes **owner** of the default organization
+
+**Create your account:**
+
+1. Navigate to `http://your-server:4096`
+2. Click "Sign Up"
+3. Enter email, username, and password
+4. Complete registration
+
+<Note>
+  The first user is critical for system administration. Use a strong password and enable two-factor authentication immediately.
+</Note>
+
+## User Registration
+
+By default, user registration is **disabled** after the first user registers.
+
+**Adding additional users:**
+
+### Option 1: Enable Registration (Admin)
+
+Allow anyone to register:
+
+1. Log in as admin
+2. Go to Settings → Security
+3. Enable "User Registration"
+4. Save changes
+
+<Warning>
+  Only enable open registration in trusted, isolated environments. For production, use SSO invitations.
+</Warning>
+
+### Option 2: SSO Invitation (Recommended)
+
+Invite users to your organization via SSO:
+
+1. Configure an SSO provider (see [SSO Configuration](#sso-configuration))
+2. Invite user by email
+3. User receives invitation and signs in via SSO
+4. User is automatically added to organization
+
+## Cookie Security
+
+Zerobyte automatically configures cookies based on your `BASE_URL` environment variable.
+
+### HTTPS Deployments (Recommended)
+
+```yaml
+environment:
+  - BASE_URL=https://zerobyte.example.com
+```
+
+**Cookie settings:**
+
+- `Secure: true` - Cookies only sent over HTTPS
+- `SameSite: Lax` - CSRF protection
+- `HttpOnly: true` - JavaScript cannot access cookies
+- `Prefix: zerobyte` - Prevents cookie conflicts
+
+**Browser behavior:**
+
+- Sessions work seamlessly over HTTPS
+- Full CSRF protection
+- Secure against session hijacking
+
+### HTTP Deployments (Development Only)
+
+```yaml
+environment:
+  - BASE_URL=http://192.168.1.50:4096
+```
+
+**Cookie settings:**
+
+- `Secure: false` - Allows cookies over HTTP
+- `SameSite: Lax` - CSRF protection (still enabled)
+- `HttpOnly: true` - JavaScript cannot access cookies
+
+**Browser behavior:**
+
+- Sessions work over HTTP (local networks)
+- Limited CSRF protection
+- Vulnerable to network sniffing
+
+<Warning>
+  **Never** use HTTP for production deployments accessible over the internet. Always use HTTPS.
+</Warning>
+
+### Reverse Proxy Configuration
+
+When running behind a reverse proxy, configure it to forward the correct protocol:
+
+**Nginx:**
+
+```nginx
+location / {
+    proxy_pass http://localhost:4096;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;  # Critical for HTTPS detection
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+```
+
+**Caddy (automatic):**
+
+```
+zerobyte.example.com {
+    reverse_proxy localhost:4096
+    # Automatically sets X-Forwarded-Proto
+}
+```
+
+**Set BASE_URL to your public HTTPS domain:**
+
+```yaml
+environment:
+  - BASE_URL=https://zerobyte.example.com  # Not http://localhost:4096
+```
+
+**How it works:**
+
+1. User accesses `https://zerobyte.example.com`
+2. Reverse proxy forwards to `http://localhost:4096`
+3. Proxy sends `X-Forwarded-Proto: https` header
+4. Zerobyte sees HTTPS and enables secure cookies
+5. Cookies marked `Secure` are sent back through proxy
+
+## Two-Factor Authentication (2FA)
+
+Zerobyte supports TOTP-based two-factor authentication for enhanced security.
+
+### Enable 2FA
+
+1. Log in to Zerobyte
+2. Go to Settings → Security
+3. Click "Enable Two-Factor Authentication"
+4. Scan QR code with authenticator app (Google Authenticator, Authy, 1Password, etc.)
+5. Enter verification code
+6. **Save your backup codes** (5 codes generated)
+
+<Warning>
+  Store backup codes securely. They are your recovery method if you lose access to your authenticator app.
+</Warning>
+
+### Backup Codes
+
+Zerobyte generates **5 encrypted backup codes** when you enable 2FA.
+
+**Features:**
+
+- **Encrypted storage** - Codes encrypted using `APP_SECRET`
+- **One-time use** - Each code can only be used once
+- **Recovery access** - Use if you lose your authenticator device
+
+**Using a backup code:**
+
+1. Go to login page
+2. Enter email and password
+3. When prompted for 2FA code, click "Use backup code"
+4. Enter one of your 5 backup codes
+5. Log in successfully
+
+<Note>
+  If you use all 5 backup codes, generate new ones from Settings → Security.
+</Note>
+
+### Disable 2FA
+
+1. Log in to Zerobyte
+2. Go to Settings → Security
+3. Click "Disable Two-Factor Authentication"
+4. Confirm action
+
+## SSO Configuration
+
+Zerobyte supports enterprise SSO via SAML 2.0 and OIDC (OpenID Connect).
+
+### Supported Protocols
+
+- **SAML 2.0** - Okta, Azure AD, Google Workspace, OneLogin, etc.
+- **OIDC** - Auth0, Keycloak, custom OIDC providers
+
+### Prerequisites
+
+- **Admin or Owner role** in an organization
+- **BASE_URL** must be set correctly (affects callback URLs)
+- **HTTPS recommended** (required by most IdPs)
+
+### Add SSO Provider
+
+1. Log in as admin or organization owner
+2. Go to Organization Settings → SSO
+3. Click "Add SSO Provider"
+4. Choose protocol (SAML or OIDC)
+5. Enter provider details:
+   - **Provider ID** - Unique identifier (e.g., `okta-production`)
+   - **Entity ID** - Your IdP's entity ID
+   - **SSO URL** - Your IdP's sign-on URL
+   - **Certificate** - X.509 certificate from IdP
+6. Save provider
+
+### Provider ID Requirements
+
+The Provider ID must:
+
+- Be unique across all organizations
+- Contain only alphanumeric characters, hyphens, and underscores
+- Not use reserved names (`admin`, `api`, `auth`, etc.)
+
+**Valid examples:**
+
+- `okta-production`
+- `azure-ad-engineering`
+- `google-workspace`
+
+**Invalid examples:**
+
+- `admin` (reserved)
+- `my provider` (contains spaces)
+- `test@org` (contains special characters)
+
+### Callback URLs
+
+Provide these URLs to your IdP during configuration:
+
+**SAML:**
+
+```
+ACS URL: https://zerobyte.example.com/api/auth/saml/callback/{providerId}
+Entity ID: https://zerobyte.example.com
+```
+
+**OIDC:**
+
+```
+Callback URL: https://zerobyte.example.com/api/auth/oidc/callback/{providerId}
+```
+
+Replace `{providerId}` with your actual provider ID (e.g., `okta-production`).
+
+<Note>
+  Callback URLs are validated against `BASE_URL`. Ensure `BASE_URL` matches your public domain.
+</Note>
+
+### Auto-Linking
+
+Allow users to automatically link SSO accounts with existing Zerobyte accounts.
+
+**Enable auto-linking:**
+
+1. Go to Organization Settings → SSO
+2. Select your SSO provider
+3. Enable "Auto-link matching emails"
+4. Save changes
+
+**How it works:**
+
+- User signs in via SSO with `user@example.com`
+- Zerobyte finds existing account with same email
+- Accounts are automatically linked
+- User can now sign in with either method
+
+**Security considerations:**
+
+- Only enable if you trust your IdP's email verification
+- Users must have verified emails in your IdP
+- Better-auth does **not** trust email verification by default
+
+<Warning>
+  Auto-linking bypasses email verification. Only enable for trusted IdPs with strong email verification.
+</Warning>
+
+### SSO Invitations
+
+Invite users to join your organization via SSO.
+
+**Send invitation:**
+
+1. Go to Organization Settings → Members
+2. Click "Invite Member"
+3. Enter user's email address
+4. Select role (Member, Admin, Owner)
+5. Set expiration (default: 7 days)
+6. Send invitation
+
+**User receives invitation:**
+
+1. User clicks SSO login for your organization
+2. User signs in via IdP
+3. Zerobyte validates invitation
+4. User is automatically added to organization with assigned role
+
+**Invitation validation:**
+
+- Email must match invitation exactly
+- Invitation must not be expired
+- Invitation status must be "pending"
+- Organization must have an active SSO provider
+
+<Note>
+  Users **cannot** register via SSO without an invitation. This prevents unauthorized access.
+</Note>
+
+### Provider Limits
+
+By default, users can create SSO providers based on their role:
+
+| Role | Max SSO Providers |
+|------|-------------------|
+| Organization Owner/Admin | 10 |
+| Regular User | 0 |
+
+This prevents abuse and unauthorized SSO configuration.
+
+### Delete SSO Provider
+
+<Warning>
+  Deleting an SSO provider will remove all associated user accounts. Users who only authenticate via SSO will lose access.
+</Warning>
+
+**Delete provider:**
+
+1. Go to Organization Settings → SSO
+2. Select provider to delete
+3. Click "Delete Provider"
+4. Confirm deletion
+
+**What happens:**
+
+- Provider configuration removed
+- All linked accounts (via this provider) deleted
+- Users can no longer sign in via this provider
+- Users with other auth methods (email/password, other SSO) retain access
+
+## Organizations
+
+Zerobyte uses organizations for multi-tenant access control.
+
+### Organization Roles
+
+| Role | Permissions |
+|------|-------------|
+| **Owner** | Full control; cannot be removed; assigned to organization creator |
+| **Admin** | Manage members, SSO, resources; can invite users |
+| **Member** | View and use organization resources; no admin access |
+
+### Default Organization
+
+When a user first signs in, a default organization is created:
+
+- **Name:** `{username}'s Organization`
+- **Owner:** The user
+- **Members:** Just the user
+
+**Organization provisioning:**
+
+- Automatically created on first login
+- User becomes organization owner
+- Organization persists across sessions
+
+### Switching Organizations
+
+Users can be members of multiple organizations.
+
+**Switch active organization:**
+
+1. Click organization name in navigation
+2. Select different organization from dropdown
+3. Context switches to selected organization
+
+**Active organization affects:**
+
+- Visible volumes, repositories, backups
+- Available SSO providers
+- Member management
+
+### Manage Members
+
+**View members:**
+
+1. Go to Organization Settings → Members
+2. View list of all members with roles
+
+**Update member role:**
+
+1. Select member
+2. Change role (Member ↔ Admin)
+3. Save changes
+
+<Note>
+  Owner role cannot be changed or removed. Transfer ownership before removing the original owner.
+</Note>
+
+**Remove member:**
+
+1. Select member
+2. Click "Remove Member"
+3. Confirm removal
+
+**Restrictions:**
+
+- Cannot remove owners
+- Cannot remove yourself
+- Must have at least one owner
+
+## Account Linking
+
+Users can link multiple authentication methods to a single account.
+
+**Supported combinations:**
+
+- Email/password + SSO (Okta)
+- Email/password + SSO (Azure AD)
+- Multiple SSO providers
+
+**Link account:**
+
+1. Log in with primary method
+2. Go to Settings → Accounts
+3. Click "Link Account"
+4. Sign in with secondary method
+5. Accounts are linked
+
+**Auto-linking (if enabled):**
+
+- Sign in via SSO
+- If email matches existing account
+- And auto-linking is enabled for provider
+- Accounts automatically linked
+
+**Unlink account:**
+
+1. Go to Settings → Accounts
+2. View linked accounts
+3. Click "Unlink" on account to remove
+4. Confirm action
+
+<Warning>
+  You cannot unlink your last authentication method. You must have at least one way to sign in.
+</Warning>
+
+## User Deletion
+
+Deleting a user affects their organizations and resources.
+
+### Deletion Impact
+
+Before deletion, Zerobyte shows the impact:
+
+**If user is the sole owner of organizations:**
+
+- Organizations will be **deleted**
+- All organization resources deleted:
+  - Volumes
+  - Repositories
+  - Backup schedules
+  - SSO providers
+  - Other members (removed from org)
+
+**If user is a member/admin only:**
+
+- Organizations remain intact
+- User is removed from memberships
+- Resources remain available to other members
+
+### Delete User
+
+1. Log in as admin
+2. Go to Settings → Users
+3. Select user to delete
+4. Click "Delete User"
+5. Review deletion impact
+6. Confirm deletion
+
+<Warning>
+  User deletion is **permanent** and cannot be undone. Ensure you have backups of any critical data in their organizations.
+</Warning>
+
+## Session Management
+
+### Session Configuration
+
+- **Storage:** SQLite database (`sessionsTable`)
+- **Encryption:** AES-256 using derived secret from `APP_SECRET`
+- **Cookie name:** `zerobyte-session`
+- **Active organization:** Stored in session (`activeOrganizationId`)
+
+### Session Lifecycle
+
+1. **User logs in** → Session created
+2. **Session stored** → Database + cookie
+3. **User makes requests** → Session validated
+4. **User switches org** → Session updated
+5. **User logs out** → Session deleted
+
+### Session Security
+
+- **HttpOnly cookies** - JavaScript cannot access session tokens
+- **Secure cookies** - Only sent over HTTPS (when `BASE_URL` uses HTTPS)
+- **SameSite: Lax** - CSRF protection
+- **Encrypted storage** - Session data encrypted in database
+
+### Force Logout
+
+Admins can force users to log out:
+
+1. Log in as admin
+2. Go to Settings → Users
+3. Select user
+4. Click "Force Logout"
+5. User's session is deleted
+6. User must log in again
+
+## Troubleshooting
+
+### Cannot Log In
+
+**Check BASE_URL:**
+
+```yaml
+environment:
+  - BASE_URL=https://zerobyte.example.com  # Must match access URL
+```
+
+**Verify cookies are enabled:**
+
+- Check browser settings
+- Clear cookies and try again
+- Disable browser extensions
+
+**Check for HTTPS mismatch:**
+
+- If `BASE_URL` uses HTTPS, you must access via HTTPS
+- Cookies marked `Secure` won't work over HTTP
+
+### SSO Login Fails
+
+**Validate callback URL:**
+
+1. Check IdP configuration
+2. Ensure callback URL matches exactly:
+   ```
+   https://zerobyte.example.com/api/auth/saml/callback/your-provider-id
+   ```
+3. Verify `BASE_URL` is set correctly
+
+**Check provider ID:**
+
+- Provider ID in callback URL must match
+- Provider ID must exist in organization
+- Check for typos
+
+**Review logs:**
+
+```bash
+docker compose logs -f zerobyte | grep -i sso
+```
+
+### Two-Factor Not Working
+
+**Time sync issues:**
+
+- Ensure container timezone is correct (`TZ` environment variable)
+- Ensure authenticator app has correct time
+- TOTP codes are time-sensitive (30-second window)
+
+**Use backup code:**
+
+- Click "Use backup code" on login
+- Enter one of your saved backup codes
+- Generate new codes after logging in
+
+**Disable 2FA:**
+
+If locked out:
+
+1. Access database directly (advanced)
+2. Reset 2FA for user
+3. Contact system administrator
+
+### Invalid Trusted Origins
+
+If you see log warnings:
+
+```
+Ignoring invalid auth origin in configuration: not-a-url
+```
+
+**Fix:**
+
+1. Check `TRUSTED_ORIGINS` environment variable
+2. Ensure all origins are valid URLs:
+   ```yaml
+   environment:
+     - TRUSTED_ORIGINS=https://example.com,https://admin.example.com
+   ```
+3. Remove invalid entries
+4. Restart container

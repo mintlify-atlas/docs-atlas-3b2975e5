@@ -1,0 +1,363 @@
+---
+title: Repositories
+description: Manage Restic repositories for backup storage
+---
+
+Repositories are Restic backup storage locations. They can be stored locally, on cloud storage (S3, Azure, GCS), or via rclone-configured remotes.
+
+## List Repositories
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/repositories \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Retrieve all configured repositories.
+
+**Response:**
+
+<ResponseField name="repositories" type="array">
+  <Expandable>
+    <ResponseField name="id" type="string">
+      Repository ID
+    </ResponseField>
+    <ResponseField name="shortId" type="string">
+      Short identifier for URLs
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Repository name
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Backend type: "local", "s3", "azure", "gcs", "rclone"
+    </ResponseField>
+    <ResponseField name="config" type="object">
+      Backend-specific configuration
+    </ResponseField>
+    <ResponseField name="compressionMode" type="string | null">
+      Compression mode: "auto", "max", "off"
+    </ResponseField>
+    <ResponseField name="status" type="string | null">
+      Repository status: "ready", "locked", "error"
+    </ResponseField>
+    <ResponseField name="lastChecked" type="number | null">
+      Unix timestamp of last check
+    </ResponseField>
+    <ResponseField name="lastError" type="string | null">
+      Last error message if any
+    </ResponseField>
+    <ResponseField name="doctorResult" type="object | null">
+      Results from last doctor operation
+    </ResponseField>
+    <ResponseField name="createdAt" type="number">
+      Unix timestamp in milliseconds
+    </ResponseField>
+    <ResponseField name="updatedAt" type="number">
+      Unix timestamp in milliseconds
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Create Repository
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/repositories \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "S3 Backup Repository",
+    "compressionMode": "auto",
+    "config": {
+      "type": "s3",
+      "bucket": "my-backups",
+      "endpoint": "s3.amazonaws.com",
+      "region": "us-east-1",
+      "accessKeyId": "ACCESS_KEY",
+      "secretAccessKey": "SECRET_KEY"
+    }
+  }'
+```
+</CodeGroup>
+
+Create and initialize a new Restic repository.
+
+**Request Body:**
+
+<ParamField body="name" type="string" required>
+  Repository name
+</ParamField>
+
+<ParamField body="compressionMode" type="string">
+  Compression mode: "auto", "max", or "off"
+</ParamField>
+
+<ParamField body="config" type="object" required>
+  Backend configuration object (varies by type)
+  
+  **Local:**
+  - `type`: "local"
+  - `path`: Local filesystem path
+  
+  **S3:**
+  - `type`: "s3"
+  - `bucket`: Bucket name
+  - `endpoint`: S3 endpoint
+  - `region`: AWS region
+  - `accessKeyId`: AWS access key ID
+  - `secretAccessKey`: AWS secret access key
+  
+  **Azure:**
+  - `type`: "azure"
+  - `accountName`: Azure storage account name
+  - `accountKey`: Azure storage account key
+  - `container`: Container name
+  
+  **GCS:**
+  - `type`: "gcs"
+  - `bucket`: Bucket name
+  - `projectId`: GCP project ID
+  - `credentials`: Service account JSON credentials
+  
+  **Rclone:**
+  - `type`: "rclone"
+  - `remote`: Rclone remote name (from rclone config)
+  - `path`: Path within the remote
+</ParamField>
+
+**Response:**
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="repository" type="object">
+  Created repository basic info
+  <Expandable>
+    <ResponseField name="id" type="string">
+      Repository ID
+    </ResponseField>
+    <ResponseField name="shortId" type="string">
+      Short ID
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Repository name
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Get Repository
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/repositories/{shortId} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get details for a specific repository.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Response:** Returns the repository object (same structure as list response).
+
+## Get Repository Stats
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/repositories/{shortId}/stats \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get storage and compression statistics for a repository.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="total_size" type="number">
+  Total repository size in bytes
+</ResponseField>
+
+<ResponseField name="total_file_count" type="number">
+  Total number of files
+</ResponseField>
+
+<ResponseField name="compression_ratio" type="number">
+  Compression ratio (1.0 = no compression)
+</ResponseField>
+
+<ResponseField name="snapshots_count" type="number">
+  Number of snapshots
+</ResponseField>
+
+## Update Repository
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH http://localhost:4096/api/v1/repositories/{shortId} \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Repository Name"
+  }'
+```
+</CodeGroup>
+
+Update repository configuration.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Request Body:**
+
+<ParamField body="name" type="string">
+  New repository name
+</ParamField>
+
+<ParamField body="compressionMode" type="string">
+  Updated compression mode
+</ParamField>
+
+<ParamField body="config" type="object">
+  Updated backend configuration
+</ParamField>
+
+**Response:** Returns the updated repository object.
+
+## Delete Repository
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:4096/api/v1/repositories/{shortId} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Delete a repository and all its snapshots.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+## Unlock Repository
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/repositories/{shortId}/unlock \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Unlock a repository by removing stale locks.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="success" type="boolean">
+  Whether unlock succeeded
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Result message
+</ResponseField>
+
+## Start Doctor
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/repositories/{shortId}/doctor \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Start an asynchronous doctor operation to fix repository issues (unlock, check, repair index).
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="message" type="string">
+  Status message
+</ResponseField>
+
+<ResponseField name="repositoryId" type="string">
+  Repository ID
+</ResponseField>
+
+## Cancel Doctor
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:4096/api/v1/repositories/{shortId}/doctor \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Cancel a running doctor operation.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="message" type="string">
+  Cancellation status message
+</ResponseField>
+
+## List Rclone Remotes
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/repositories/rclone-remotes \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+List all configured rclone remotes on the host system.
+
+**Response:**
+
+<ResponseField name="remotes" type="array">
+  <Expandable>
+    <ResponseField name="name" type="string">
+      Remote name
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Remote type (e.g., "s3", "dropbox", "gdrive")
+    </ResponseField>
+  </Expandable>
+</ResponseField>

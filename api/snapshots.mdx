@@ -1,0 +1,436 @@
+---
+title: Snapshots
+description: Manage and restore backup snapshots
+---
+
+Snapshots are point-in-time backups stored in repositories. Each snapshot contains files from a backup job and includes metadata like tags, duration, and retention categories.
+
+## List Snapshots
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:4096/api/v1/repositories/{shortId}/snapshots?backupId=abc123" \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+List all snapshots in a repository, optionally filtered by backup schedule.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+<ParamField query="backupId" type="string">
+  Filter by backup schedule short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="snapshots" type="array">
+  <Expandable>
+    <ResponseField name="short_id" type="string">
+      Snapshot short ID
+    </ResponseField>
+    <ResponseField name="time" type="number">
+      Snapshot creation timestamp (milliseconds)
+    </ResponseField>
+    <ResponseField name="paths" type="string[]">
+      Backed up paths
+    </ResponseField>
+    <ResponseField name="size" type="number">
+      Total bytes processed
+    </ResponseField>
+    <ResponseField name="duration" type="number">
+      Backup duration in seconds
+    </ResponseField>
+    <ResponseField name="tags" type="string[]">
+      Snapshot tags
+    </ResponseField>
+    <ResponseField name="retentionCategories" type="string[]">
+      Retention categories (e.g., "daily", "weekly")
+    </ResponseField>
+    <ResponseField name="hostname" type="string">
+      Hostname where backup was created
+    </ResponseField>
+    <ResponseField name="summary" type="object">
+      Restic backup summary with detailed statistics
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Get Snapshot Details
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/repositories/{shortId}/snapshots/{snapshotId} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get detailed information about a specific snapshot.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+<ParamField path="snapshotId" type="string" required>
+  Snapshot ID or short ID
+</ParamField>
+
+**Response:** Returns a snapshot object (same structure as list response).
+
+## Refresh Snapshots
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/repositories/{shortId}/snapshots/refresh \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Clear snapshot cache and force refresh from repository.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="count" type="number">
+  Number of snapshots refreshed
+</ResponseField>
+
+## List Snapshot Files
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:4096/api/v1/repositories/{shortId}/snapshots/{snapshotId}/files?path=/data&offset=0&limit=500" \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+List files and directories within a snapshot.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+<ParamField path="snapshotId" type="string" required>
+  Snapshot ID
+</ParamField>
+
+<ParamField query="path" type="string">
+  Directory path to list (URL-encoded)
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Pagination offset
+</ParamField>
+
+<ParamField query="limit" type="integer" default="500">
+  Items per page (max: 1000)
+</ParamField>
+
+**Response:**
+
+<ResponseField name="snapshot" type="object">
+  Snapshot metadata
+  <Expandable>
+    <ResponseField name="id" type="string">
+      Full snapshot ID
+    </ResponseField>
+    <ResponseField name="short_id" type="string">
+      Short snapshot ID
+    </ResponseField>
+    <ResponseField name="time" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    <ResponseField name="hostname" type="string">
+      Hostname
+    </ResponseField>
+    <ResponseField name="paths" type="string[]">
+      Backup paths
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="files" type="array">
+  File and directory entries
+  <Expandable>
+    <ResponseField name="name" type="string">
+      File or directory name
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Entry type ("file", "dir", etc.)
+    </ResponseField>
+    <ResponseField name="path" type="string">
+      Full path
+    </ResponseField>
+    <ResponseField name="uid" type="number">
+      User ID
+    </ResponseField>
+    <ResponseField name="gid" type="number">
+      Group ID
+    </ResponseField>
+    <ResponseField name="size" type="number">
+      File size in bytes
+    </ResponseField>
+    <ResponseField name="mode" type="number">
+      Unix file mode
+    </ResponseField>
+    <ResponseField name="mtime" type="string">
+      Modification time (ISO 8601)
+    </ResponseField>
+    <ResponseField name="atime" type="string">
+      Access time (ISO 8601)
+    </ResponseField>
+    <ResponseField name="ctime" type="string">
+      Change time (ISO 8601)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="offset" type="number">
+  Current offset
+</ResponseField>
+
+<ResponseField name="limit" type="number">
+  Current limit
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Total number of entries
+</ResponseField>
+
+<ResponseField name="hasMore" type="boolean">
+  Whether more entries are available
+</ResponseField>
+
+## Download Snapshot Files
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:4096/api/v1/repositories/{shortId}/snapshots/{snapshotId}/dump?path=/data/file.txt&kind=file" \
+  -H "Cookie: zerobyte.session=..." \
+  -o downloaded-file.txt
+```
+</CodeGroup>
+
+Download files or directories from a snapshot as a stream.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+<ParamField path="snapshotId" type="string" required>
+  Snapshot ID
+</ParamField>
+
+<ParamField query="path" type="string">
+  File or directory path to download
+</ParamField>
+
+<ParamField query="kind" type="string">
+  Path type: "file" (raw stream) or "dir" (tar archive)
+</ParamField>
+
+**Response:**
+
+- **For files:** Raw file stream with `Content-Type: application/octet-stream`
+- **For directories:** Tar archive with `Content-Type: application/x-tar`
+
+The `Content-Disposition` header includes the appropriate filename.
+
+## Restore Snapshot
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/repositories/{shortId}/restore \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "snapshotId": "abc12345",
+    "targetPath": "/mnt/restore",
+    "include": ["/data/*"],
+    "exclude": ["*.tmp"],
+    "overwrite": "always"
+  }'
+```
+</CodeGroup>
+
+Restore a snapshot to a target path on the filesystem.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Request Body:**
+
+<ParamField body="snapshotId" type="string" required>
+  Snapshot ID to restore
+</ParamField>
+
+<ParamField body="targetPath" type="string">
+  Target filesystem path (defaults to original location)
+</ParamField>
+
+<ParamField body="include" type="string[]">
+  Patterns to include (glob patterns)
+</ParamField>
+
+<ParamField body="exclude" type="string[]">
+  Patterns to exclude (glob patterns)
+</ParamField>
+
+<ParamField body="excludeXattr" type="string[]">
+  Extended attributes to exclude
+</ParamField>
+
+<ParamField body="delete" type="boolean">
+  Delete extra files not in snapshot
+</ParamField>
+
+<ParamField body="overwrite" type="string">
+  Overwrite mode: "always", "never", or "if-newer"
+</ParamField>
+
+**Response:**
+
+<ResponseField name="success" type="boolean">
+  Whether restore succeeded
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Result message
+</ResponseField>
+
+<ResponseField name="filesRestored" type="number">
+  Number of files restored
+</ResponseField>
+
+<ResponseField name="filesSkipped" type="number">
+  Number of files skipped
+</ResponseField>
+
+## Delete Snapshot
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:4096/api/v1/repositories/{shortId}/snapshots/{snapshotId} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Delete a specific snapshot.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+<ParamField path="snapshotId" type="string" required>
+  Snapshot ID to delete
+</ParamField>
+
+**Response:**
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+## Delete Multiple Snapshots
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:4096/api/v1/repositories/{shortId}/snapshots \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "snapshotIds": ["abc123", "def456"]
+  }'
+```
+</CodeGroup>
+
+Delete multiple snapshots in a single operation.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Request Body:**
+
+<ParamField body="snapshotIds" type="string[]" required>
+  Array of snapshot IDs to delete (minimum 1)
+</ParamField>
+
+**Response:**
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+## Tag Snapshots
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/repositories/{shortId}/snapshots/tag \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "snapshotIds": ["abc123", "def456"],
+    "add": ["production", "important"],
+    "remove": ["test"]
+  }'
+```
+</CodeGroup>
+
+Add, remove, or set tags on multiple snapshots.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Repository short ID
+</ParamField>
+
+**Request Body:**
+
+<ParamField body="snapshotIds" type="string[]" required>
+  Array of snapshot IDs (minimum 1)
+</ParamField>
+
+<ParamField body="add" type="string[]">
+  Tags to add
+</ParamField>
+
+<ParamField body="remove" type="string[]">
+  Tags to remove
+</ParamField>
+
+<ParamField body="set" type="string[]">
+  Replace all tags with this list
+</ParamField>
+
+**Response:**
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>

@@ -1,0 +1,316 @@
+---
+title: Notifications
+description: Configure notification destinations for backup alerts
+---
+
+Notifications allow you to receive alerts about backup events (start, success, warning, failure) through various channels like email, webhooks, Slack, Discord, and more.
+
+## List Notification Destinations
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/notifications/destinations \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Retrieve all configured notification destinations.
+
+**Response:**
+
+<ResponseField name="destinations" type="array">
+  <Expandable>
+    <ResponseField name="id" type="number">
+      Destination ID
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Destination name
+    </ResponseField>
+    <ResponseField name="enabled" type="boolean">
+      Whether destination is active
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Notification type: "email", "webhook", "slack", "discord", "telegram", "ntfy"
+    </ResponseField>
+    <ResponseField name="config" type="object">
+      Type-specific configuration (varies by type)
+    </ResponseField>
+    <ResponseField name="createdAt" type="number">
+      Unix timestamp in milliseconds
+    </ResponseField>
+    <ResponseField name="updatedAt" type="number">
+      Unix timestamp in milliseconds
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Create Notification Destination
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/notifications/destinations \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Slack Alerts",
+    "config": {
+      "type": "slack",
+      "webhookUrl": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+    }
+  }'
+```
+</CodeGroup>
+
+Create a new notification destination.
+
+**Request Body:**
+
+<ParamField body="name" type="string" required>
+  Destination name
+</ParamField>
+
+<ParamField body="config" type="object" required>
+  Notification configuration (varies by type)
+  
+  **Email:**
+  - `type`: "email"
+  - `to`: Recipient email address(es)
+  - `smtpHost`: SMTP server hostname
+  - `smtpPort`: SMTP port
+  - `smtpUsername`: SMTP username
+  - `smtpPassword`: SMTP password
+  - `smtpSecure`: Use TLS (boolean)
+  - `from`: Sender email address
+  
+  **Webhook:**
+  - `type`: "webhook"
+  - `url`: Webhook URL
+  - `method`: HTTP method ("POST", "PUT")
+  - `headers`: Custom headers (object)
+  
+  **Slack:**
+  - `type`: "slack"
+  - `webhookUrl`: Slack webhook URL
+  
+  **Discord:**
+  - `type`: "discord"
+  - `webhookUrl`: Discord webhook URL
+  
+  **Telegram:**
+  - `type`: "telegram"
+  - `botToken`: Telegram bot token
+  - `chatId`: Chat ID
+  
+  **Ntfy:**
+  - `type`: "ntfy"
+  - `serverUrl`: Ntfy server URL
+  - `topic`: Ntfy topic
+  - `token`: Authentication token (optional)
+</ParamField>
+
+**Response:** Returns the created destination object.
+
+## Get Notification Destination
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/notifications/destinations/{id} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get details for a specific notification destination.
+
+**Parameters:**
+
+<ParamField path="id" type="number" required>
+  Destination ID
+</ParamField>
+
+**Response:** Returns the destination object (same structure as list response).
+
+## Update Notification Destination
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH http://localhost:4096/api/v1/notifications/destinations/{id} \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": false
+  }'
+```
+</CodeGroup>
+
+Update a notification destination.
+
+**Parameters:**
+
+<ParamField path="id" type="number" required>
+  Destination ID
+</ParamField>
+
+**Request Body:**
+
+<ParamField body="name" type="string">
+  Updated name
+</ParamField>
+
+<ParamField body="enabled" type="boolean">
+  Enable or disable destination
+</ParamField>
+
+<ParamField body="config" type="object">
+  Updated configuration
+</ParamField>
+
+**Response:** Returns the updated destination object.
+
+## Delete Notification Destination
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:4096/api/v1/notifications/destinations/{id} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Delete a notification destination.
+
+**Parameters:**
+
+<ParamField path="id" type="number" required>
+  Destination ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+## Test Notification Destination
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/notifications/destinations/{id}/test \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Send a test notification to verify the destination is configured correctly.
+
+**Parameters:**
+
+<ParamField path="id" type="number" required>
+  Destination ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="success" type="boolean">
+  Whether test notification was sent successfully
+</ResponseField>
+
+## Get Schedule Notifications
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/backups/{shortId}/notifications \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get notification assignments for a backup schedule.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Backup schedule short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="assignments" type="array">
+  Notification assignments
+  <Expandable>
+    <ResponseField name="scheduleId" type="number">
+      Schedule ID
+    </ResponseField>
+    <ResponseField name="destinationId" type="number">
+      Destination ID
+    </ResponseField>
+    <ResponseField name="notifyOnStart" type="boolean">
+      Send notification when backup starts
+    </ResponseField>
+    <ResponseField name="notifyOnSuccess" type="boolean">
+      Send notification when backup succeeds
+    </ResponseField>
+    <ResponseField name="notifyOnWarning" type="boolean">
+      Send notification on warnings
+    </ResponseField>
+    <ResponseField name="notifyOnFailure" type="boolean">
+      Send notification when backup fails
+    </ResponseField>
+    <ResponseField name="createdAt" type="number">
+      Unix timestamp
+    </ResponseField>
+    <ResponseField name="destination" type="object">
+      Full destination object
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Update Schedule Notifications
+
+<CodeGroup>
+```bash cURL
+curl -X PUT http://localhost:4096/api/v1/backups/{shortId}/notifications \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "assignments": [
+      {
+        "destinationId": 1,
+        "notifyOnStart": false,
+        "notifyOnSuccess": true,
+        "notifyOnWarning": true,
+        "notifyOnFailure": true
+      }
+    ]
+  }'
+```
+</CodeGroup>
+
+Update notification assignments for a backup schedule.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Backup schedule short ID
+</ParamField>
+
+**Request Body:**
+
+<ParamField body="assignments" type="array" required>
+  Notification assignments
+  <Expandable>
+    <ParamField body="destinationId" type="number" required>
+      Destination ID
+    </ParamField>
+    <ParamField body="notifyOnStart" type="boolean" required>
+      Notify when backup starts
+    </ParamField>
+    <ParamField body="notifyOnSuccess" type="boolean" required>
+      Notify on success
+    </ParamField>
+    <ParamField body="notifyOnWarning" type="boolean" required>
+      Notify on warnings
+    </ParamField>
+    <ParamField body="notifyOnFailure" type="boolean" required>
+      Notify on failure
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Response:** Returns the updated assignments array.

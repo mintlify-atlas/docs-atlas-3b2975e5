@@ -1,0 +1,600 @@
+---
+title: Security
+description: Security best practices and configuration for Zerobyte
+---
+
+Zerobyte handles sensitive data including backup encryption keys, storage credentials, and user passwords. This page covers security considerations and best practices.
+
+## Encryption
+
+### APP_SECRET
+
+The `APP_SECRET` environment variable is the foundation of Zerobyte's security. It's used to encrypt sensitive data in the database.
+
+**What it encrypts:**
+
+- Repository passwords and encryption keys
+- Storage backend credentials (S3 keys, SMB passwords, etc.)
+- Volume mount credentials
+- Session tokens and cookies
+- Two-factor authentication secrets
+
+**Requirements:**
+
+- **Length:** 32-256 characters
+- **Type:** Random, high-entropy string
+- **Format:** Hex string recommended
+
+**Generate a secure secret:**
+
+```bash
+openssl rand -hex 32
+```
+
+Example output:
+
+```
+94bad46f1e8c3c2e7a9b5d4c8f6e3a1b2c4d6e8f0a1b3c5d7e9f1a3b5c7d9e1f3
+```
+
+**Set in docker-compose.yml:**
+
+```yaml
+environment:
+  - APP_SECRET=94bad46f1e8c3c2e7a9b5d4c8f6e3a1b2c4d6e8f0a1b3c5d7e9f1a3b5c7d9e1f3
+```
+
+<Warning>
+  **Critical:** Store this secret securely and back it up. If lost, encrypted data in the database becomes **permanently unrecoverable**.
+</Warning>
+
+### Secret Storage Best Practices
+
+1. **Never commit secrets to version control**
+   ```bash
+   # Use .env file (add to .gitignore)
+   echo "APP_SECRET=your_secret_here" > .env
+   ```
+
+2. **Use environment files**
+   ```yaml
+   services:
+     zerobyte:
+       env_file:
+         - .env  # Contains APP_SECRET=...
+   ```
+
+3. **Use Docker Secrets (production)**
+   ```bash
+   echo "your_secret_here" | docker secret create zerobyte_app_secret -
+   ```
+   
+   ```yaml
+   services:
+     zerobyte:
+       secrets:
+         - zerobyte_app_secret
+   ```
+
+4. **Use a secrets manager**
+   - HashiCorp Vault
+   - AWS Secrets Manager
+   - Azure Key Vault
+   - 1Password / Bitwarden
+
+### Backup Encryption (Restic)
+
+All backups are encrypted by Restic using industry-standard algorithms:
+
+- **Encryption:** AES-256 in counter mode
+- **Key derivation:** scrypt with high parameters
+- **Authentication:** Poly1305-AES
+
+**Repository password:**
+
+Each repository has its own encryption password, stored encrypted in the database using `APP_SECRET`.
+
+**Best practices:**
+
+- Use strong, unique passwords for each repository
+- Store repository passwords in a password manager
+- Download and backup repository passwords from Zerobyte UI
+- Test repository password recovery before relying on backups
+
+<Warning>
+  If you lose both the `APP_SECRET` and the repository password, your backups are **permanently unrecoverable**.
+</Warning>
+
+## Network Security
+
+### BASE_URL Configuration
+
+The `BASE_URL` environment variable controls cookie security and CORS behavior.
+
+**HTTP vs HTTPS:**
+
+```yaml
+# Development/Local (HTTP)
+environment:
+  - BASE_URL=http://192.168.1.50:4096
+# Cookies: Secure=false (allowed over HTTP)
+
+# Production (HTTPS)
+environment:
+  - BASE_URL=https://zerobyte.example.com
+# Cookies: Secure=true (HTTPS only)
+```
+
+**How it affects security:**
+
+| Protocol | Secure Cookies | CSRF Protection | Session Hijacking Risk |
+|----------|----------------|-----------------|------------------------|
+| HTTP | ❌ No | ⚠️ Limited | ⚠️ Higher |
+| HTTPS | ✅ Yes | ✅ Full | ✅ Lower |
+
+<Warning>
+  **Never** use HTTP for production deployments accessible over the internet. Always use HTTPS with a valid SSL certificate.
+</Warning>
+
+### Secure Cookie Configuration
+
+Zerobyte automatically configures cookies based on `BASE_URL`:
+
+**HTTPS (BASE_URL starts with `https://`):**
+
+- `Secure: true` - Cookies only sent over HTTPS
+- `SameSite: Lax` - CSRF protection
+- `HttpOnly: true` - JavaScript cannot access cookies
+- Cookie prefix: `zerobyte`
+
+**HTTP (BASE_URL starts with `http://`):**
+
+- `Secure: false` - Cookies sent over HTTP (local development only)
+- `SameSite: Lax` - CSRF protection
+- `HttpOnly: true` - JavaScript cannot access cookies
+
+### Trusted Origins (CORS)
+
+Control which origins can make requests to Zerobyte's API:
+
+```yaml
+environment:
+  - BASE_URL=https://zerobyte.example.com
+  - TRUSTED_ORIGINS=https://admin.example.com,https://monitoring.example.com
+```
+
+**Automatically trusted:**
+
+- The `BASE_URL` origin
+- Any origins in `TRUSTED_ORIGINS`
+
+**Invalid origins are logged and ignored:**
+
+```
+Ignoring invalid auth origin in configuration: not-a-url
+```
+
+### Reverse Proxy Setup
+
+When running behind a reverse proxy, ensure proper header forwarding:
+
+**Nginx:**
+
+```nginx
+location / {
+    proxy_pass http://localhost:4096;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+**Caddy:**
+
+```
+zerobyte.example.com {
+    reverse_proxy localhost:4096
+}
+```
+
+**Traefik:**
+
+```yaml
+labels:
+  - "traefik.http.routers.zerobyte.rule=Host(`zerobyte.example.com`)"
+  - "traefik.http.routers.zerobyte.tls=true"
+  - "traefik.http.services.zerobyte.loadbalancer.server.port=4096"
+```
+
+**Set BASE_URL to the public HTTPS URL:**
+
+```yaml
+environment:
+  - BASE_URL=https://zerobyte.example.com  # Not http://localhost:4096
+```
+
+### Restrict Network Access
+
+**Bind to localhost only:**
+
+```yaml
+ports:
+  - "127.0.0.1:4096:4096"  # Only accessible from host
+```
+
+**Use a secure tunnel:**
+
+- **SSH tunnel:**
+  ```bash
+  ssh -L 4096:localhost:4096 user@server
+  ```
+
+- **Cloudflare Tunnel:**
+  ```bash
+  cloudflared tunnel --url http://localhost:4096
+  ```
+
+- **Tailscale:**
+  ```yaml
+  services:
+    zerobyte:
+      # ... zerobyte config ...
+    
+    tailscale:
+      image: tailscale/tailscale:latest
+      network_mode: service:zerobyte
+      # See Tailscale sidecar example
+  ```
+
+<Warning>
+  **Never** expose Zerobyte directly to the internet without authentication and HTTPS. Use a reverse proxy, VPN, or secure tunnel.
+</Warning>
+
+## Access Control
+
+### Rate Limiting
+
+Zerobyte includes built-in rate limiting to prevent brute-force attacks.
+
+**Enabled by default in production:**
+
+```yaml
+environment:
+  - NODE_ENV=production
+  # Rate limiting is enabled
+```
+
+**Disable for development/testing only:**
+
+```yaml
+environment:
+  - DISABLE_RATE_LIMITING=true  # Not recommended for production
+```
+
+<Warning>
+  Only disable rate limiting in isolated development environments.
+</Warning>
+
+### User Registration
+
+By default, only the first user can register. Additional users must be:
+
+1. **Invited via SSO** - Organization admins can invite users
+2. **Enabled by admin** - First user can enable open registration
+
+**First user:**
+
+- Automatically assigned `admin` role
+- Can configure SSO providers
+- Can enable/disable registration
+
+**Subsequent users:**
+
+- Registration blocked unless:
+  - Registration is enabled in settings
+  - User has a valid SSO invitation
+
+### Role-Based Access Control
+
+Zerobyte uses organization-based access control:
+
+**Roles:**
+
+| Role | Permissions |
+|------|-------------|
+| **Owner** | Full control of organization, cannot be removed |
+| **Admin** | Manage members, SSO, resources |
+| **Member** | View and use organization resources |
+
+**Global roles:**
+
+- **Admin** - First user, system-level access
+- **User** - Default role for new users
+
+## Credential Management
+
+### Secret References
+
+Avoid storing secrets directly in Zerobyte's database by using secret references:
+
+**Environment variables:**
+
+```yaml
+environment:
+  - S3_ACCESS_KEY_ID=AKIA...
+  - S3_SECRET_ACCESS_KEY=wJalrXUtn...
+```
+
+In Zerobyte UI, use: `env://S3_ACCESS_KEY_ID`
+
+**Docker Secrets:**
+
+```yaml
+secrets:
+  - s3_secret_key
+
+secrets:
+  s3_secret_key:
+    file: ./secrets/s3-secret.txt
+```
+
+In Zerobyte UI, use: `file://s3_secret_key`
+
+**Benefits:**
+
+- Secrets not stored in database (even encrypted)
+- Secrets managed by external systems
+- Easier rotation and auditing
+- Works with secrets managers
+
+### Volume Mount Credentials
+
+When configuring SMB, NFS, or other network volumes:
+
+**Option 1: Store in database (encrypted with APP_SECRET)**
+
+```
+Password: mypassword
+```
+
+**Option 2: Use secret references**
+
+```
+Password: env://SMB_PASSWORD
+```
+
+```
+Password: file://nas_password
+```
+
+**Best practice:**
+
+Use secret references for:
+
+- Credentials shared across multiple volumes
+- Credentials that rotate frequently
+- Highly sensitive environments
+
+## Container Security
+
+### Required Capabilities
+
+**Standard setup:**
+
+```yaml
+cap_add:
+  - SYS_ADMIN
+```
+
+**Why it's needed:**
+
+- Mount remote filesystems (NFS, SMB, WebDAV, SFTP)
+- Required for FUSE operations
+
+**Security implications:**
+
+- `SYS_ADMIN` is a powerful capability
+- Grants container elevated privileges
+- Could potentially be abused if container is compromised
+
+**Mitigation:**
+
+1. **Use simplified setup if possible** (no `SYS_ADMIN`)
+2. **Restrict network access** (localhost only)
+3. **Keep container updated** (regular image pulls)
+4. **Monitor container logs**
+5. **Use read-only volumes** where possible
+
+### Volume Security
+
+**Read-only mounts:**
+
+```yaml
+volumes:
+  - /path/to/data:/data:ro  # Read-only
+```
+
+**Protect data directory:**
+
+```bash
+# Set restrictive permissions
+sudo chmod 700 /var/lib/zerobyte
+sudo chown -R 1000:1000 /var/lib/zerobyte
+```
+
+**Never mount:**
+
+- `/var/lib/zerobyte` on a network share (performance + security)
+- Entire host filesystem into container
+- Docker socket (`/var/run/docker.sock`) - not needed
+
+## Monitoring & Auditing
+
+### Enable Logging
+
+```yaml
+environment:
+  - LOG_LEVEL=info  # or 'debug' for detailed logs
+```
+
+**What's logged:**
+
+- Authentication attempts
+- SSO provider validation
+- User registration blocks
+- Invalid auth origins
+- Backup operations
+- Errors and warnings
+
+**View logs:**
+
+```bash
+docker compose logs -f zerobyte
+```
+
+### Security Events
+
+Zerobyte logs security-relevant events:
+
+- Failed login attempts
+- Invalid SSO provider IDs
+- Registration blocks
+- Unauthorized access attempts
+- Invalid trusted origins
+
+**Example log output:**
+
+```
+User registration attempt blocked: registrations are not enabled.
+Ignoring invalid auth origin in configuration: http://bad-origin
+```
+
+## Security Checklist
+
+### Deployment
+
+- [ ] Generate strong `APP_SECRET` (32+ characters)
+- [ ] Backup `APP_SECRET` securely
+- [ ] Use HTTPS for `BASE_URL`
+- [ ] Set appropriate `TRUSTED_ORIGINS`
+- [ ] Bind to localhost (if using reverse proxy)
+- [ ] Enable rate limiting (default in production)
+- [ ] Set restrictive file permissions on data directory
+- [ ] Use read-only volume mounts where possible
+- [ ] Configure reverse proxy with HTTPS
+- [ ] Enable firewall rules
+
+### Operations
+
+- [ ] Backup repository passwords
+- [ ] Test repository password recovery
+- [ ] Use secret references for credentials
+- [ ] Rotate secrets periodically
+- [ ] Monitor logs for suspicious activity
+- [ ] Keep Docker image updated
+- [ ] Review user access regularly
+- [ ] Document disaster recovery procedure
+
+### Authentication
+
+- [ ] Enable two-factor authentication for users
+- [ ] Configure SSO providers (if multi-user)
+- [ ] Disable open registration (if not needed)
+- [ ] Use strong passwords
+- [ ] Review organization memberships
+- [ ] Remove unused accounts
+
+## Compliance
+
+### Data Encryption
+
+- **At rest:** All sensitive data encrypted in database (AES-256)
+- **In transit:** HTTPS (when configured)
+- **Backups:** AES-256 via Restic
+
+### Data Residency
+
+All application data stored in:
+
+- `/var/lib/zerobyte` (SQLite database)
+- Configured repository backends (you control location)
+
+**For compliance:**
+
+- Choose repository location based on requirements
+- Use regional S3 buckets / storage
+- Self-host repositories on-premises
+
+### Audit Trail
+
+Zerobyte logs:
+
+- User authentication
+- Backup operations
+- Configuration changes
+- Access attempts
+
+Forward logs to external system for compliance:
+
+```bash
+docker compose logs -f zerobyte | your-log-aggregator
+```
+
+## Incident Response
+
+### Suspected Compromise
+
+1. **Immediately:**
+   - Stop the container: `docker compose down`
+   - Disconnect from network
+   - Preserve logs: `docker compose logs zerobyte > incident.log`
+
+2. **Investigate:**
+   - Review logs for unauthorized access
+   - Check user accounts for suspicious activity
+   - Verify backup integrity
+
+3. **Remediate:**
+   - Generate new `APP_SECRET`
+   - Rotate all credentials
+   - Reset user passwords
+   - Update container image
+   - Reconfigure firewall rules
+
+4. **Recovery:**
+   - Restore from known-good backup
+   - Rebuild container with new secrets
+   - Force all users to re-authenticate
+
+### Lost APP_SECRET
+
+<Warning>
+  If you lose the `APP_SECRET`, encrypted data in the database is **permanently unrecoverable**.
+</Warning>
+
+**What's affected:**
+
+- Repository passwords
+- Storage backend credentials
+- Volume mount credentials
+- User 2FA secrets
+
+**Recovery options:**
+
+1. **If you have backups of the secret:**
+   - Restore the original `APP_SECRET`
+   - Restart container
+
+2. **If the secret is permanently lost:**
+   - Create new repositories with new passwords
+   - Reconfigure storage backends
+   - Reconfigure volume mounts
+   - Users must re-enable 2FA
+
+**Prevention:**
+
+- Store `APP_SECRET` in a password manager
+- Document secret location
+- Include in disaster recovery plan
+- Test recovery procedure

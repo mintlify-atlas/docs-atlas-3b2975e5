@@ -1,0 +1,340 @@
+---
+title: Rclone Integration
+description: Configure rclone to use 40+ cloud storage providers as backup repositories or volume sources
+---
+
+Zerobyte integrates with [rclone](https://rclone.org/) to provide support for 40+ cloud storage providers including Google Drive, Dropbox, OneDrive, Box, pCloud, Mega, and many more. This gives you the flexibility to store your backups on virtually any cloud storage service.
+
+## Overview
+
+Rclone can be used in Zerobyte for two purposes:
+
+1. **Repository Backend** - Store encrypted backups on cloud storage (Dropbox, Google Drive, OneDrive, etc.)
+2. **Volume Backend** - Mount cloud storage as a source to back up from (requires additional configuration)
+
+<Warning>
+Before using rclone with Zerobyte, you must configure rclone on your Docker **host** system and mount the configuration into the container.
+</Warning>
+
+## Prerequisites
+
+- Docker with Docker Compose
+- Linux host (required for rclone volume mounting)
+- rclone installed on the Docker host
+
+## Installation
+
+### 1. Install rclone on Host
+
+If rclone is not already installed on your Docker host:
+
+```bash
+curl https://rclone.org/install.sh | sudo bash
+```
+
+Verify installation:
+
+```bash
+rclone version
+```
+
+### 2. Configure Cloud Storage Remote
+
+Run rclone's interactive configuration wizard:
+
+```bash
+rclone config
+```
+
+Follow the prompts to set up your cloud storage provider. For OAuth providers like Google Drive, Dropbox, and OneDrive, rclone will guide you through the authentication flow in your browser.
+
+<Tip>
+Give your remote a descriptive name (e.g., `gdrive`, `dropbox`, `onedrive`) as this will appear in Zerobyte's repository creation interface.
+</Tip>
+
+### 3. Verify Remote Configuration
+
+Confirm your remote is properly configured:
+
+```bash
+# List all configured remotes
+rclone listremotes
+
+# Test listing directories (replace 'myremote' with your remote name)
+rclone lsd myremote:
+
+# Test reading files
+rclone ls myremote:path/to/test
+```
+
+<Warning>
+If these commands fail on your host, fix your rclone configuration before proceeding. Most rclone issues in Zerobyte are due to misconfigured remotes on the host.
+</Warning>
+
+### 4. Mount Rclone Config into Container
+
+Update your `docker-compose.yml` to mount the rclone configuration directory:
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:latest
+    container_name: zerobyte
+    restart: unless-stopped
+    ports:
+      - "4096:4096"
+    environment:
+      - TZ=${TZ:-UTC}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+      - ~/.config/rclone:/root/.config/rclone:ro  # Add this line
+```
+
+<Note>
+The rclone config is mounted read-only (`:ro`) for security. The default path is `~/.config/rclone` on Linux. For root users, use `/root/.config/rclone`.
+</Note>
+
+### 5. Restart Zerobyte
+
+After updating the configuration:
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+## Using Rclone Repositories
+
+Once configured, rclone remotes will appear in the repository creation dropdown:
+
+1. Navigate to **Repositories** in the Zerobyte UI
+2. Click **Create Repository**
+3. Select **rclone** as the backend type
+4. Choose your configured remote from the dropdown
+5. Specify the path on the remote where backups should be stored
+6. Click **Create**
+
+Zerobyte will initialize a new Restic repository on your cloud storage.
+
+## Supported Cloud Providers
+
+Rclone supports 40+ storage providers. Popular options include:
+
+- **Dropbox** - Cloud storage with 2GB free tier
+- **Google Drive** - 15GB free tier
+- **OneDrive** - Microsoft's cloud storage
+- **Box** - Enterprise cloud storage
+- **pCloud** - European cloud storage
+- **Mega** - End-to-end encrypted storage
+- **Amazon Drive** - Amazon's cloud storage
+- **Backblaze B2** - Low-cost cloud storage
+- **SFTP** - Any SSH/SFTP server
+- **WebDAV** - Generic WebDAV servers
+- **FTP** - Traditional FTP servers
+
+For a complete list, see the [official rclone documentation](https://rclone.org/#providers).
+
+## Rclone Volume Mounting
+
+You can also use rclone to mount cloud storage as a **volume source** to back up from. This requires additional Docker privileges.
+
+### Requirements for Volume Mounting
+
+- Linux Docker host (not supported on Windows/macOS)
+- `/dev/fuse` device access
+- `SYS_ADMIN` capability
+- FUSE support on host system
+
+### Configuration for Volume Mounting
+
+Update your `docker-compose.yml`:
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:latest
+    container_name: zerobyte
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN  # Required for mounting
+    devices:
+      - /dev/fuse:/dev/fuse  # Required for FUSE
+    ports:
+      - "4096:4096"
+    environment:
+      - TZ=${TZ:-UTC}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+      - ~/.config/rclone:/root/.config/rclone:ro
+```
+
+<Warning>
+Granting `SYS_ADMIN` allows the container to perform mount operations. Only use this if you need rclone volume mounting.
+</Warning>
+
+### Testing Rclone Mount on Host
+
+Before using rclone volumes in Zerobyte, verify mounting works on your host:
+
+```bash
+# Create test mount point
+mkdir -p /tmp/rclone-test
+
+# Mount remote (replace 'myremote' and path)
+rclone mount myremote:path /tmp/rclone-test --daemon --vfs-cache-mode writes
+
+# Test access
+ls /tmp/rclone-test
+
+# Unmount when done
+fusermount -u /tmp/rclone-test
+```
+
+If this works, you can create rclone volumes in Zerobyte.
+
+## Authentication Issues
+
+### OAuth Token Expiration
+
+OAuth tokens for providers like Google Drive and Dropbox can expire. If you see "Failed to Create File System" errors:
+
+```bash
+# Re-authenticate the remote
+rclone config
+
+# Select your remote and choose "Reconnect"
+# Follow the OAuth flow again
+
+# Verify authentication
+rclone lsd remote:
+
+# Restart Zerobyte
+docker compose restart
+```
+
+### SFTP Remote with SSH Keys
+
+When using SFTP remotes with SSH key authentication, the key file must be accessible inside the container.
+
+**Option 1: Mount SSH keys (Recommended)**
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    volumes:
+      - ~/.config/rclone:/root/.config/rclone:ro
+      - ~/.ssh:/root/.ssh:ro  # Mount SSH keys
+```
+
+**Option 2: Embed key in rclone config**
+
+Convert your SSH key to single-line format:
+
+```bash
+awk '{printf "%s\\n", $0}' < ~/.ssh/id_rsa
+```
+
+Update `~/.config/rclone/rclone.conf`:
+
+```ini rclone.conf
+[sftp-remote]
+type = sftp
+host = example.com
+user = backup
+key_pem = -----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5v...\n-----END OPENSSH PRIVATE KEY-----
+```
+
+**Option 3: Use ssh-agent**
+
+Configure the remote to use ssh-agent:
+
+```ini rclone.conf
+[sftp-remote]
+type = sftp
+host = example.com
+user = backup
+key_use_agent = true
+```
+
+Mount the SSH agent socket:
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    environment:
+      - SSH_AUTH_SOCK=/ssh-agent
+    volumes:
+      - ~/.config/rclone:/root/.config/rclone:ro
+      - ${SSH_AUTH_SOCK}:/ssh-agent
+```
+
+## Non-Root Containers
+
+For non-root container environments (e.g., TrueNAS), set the correct config path:
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    environment:
+      - RCLONE_CONFIG_DIR=/home/appuser/.config/rclone
+    volumes:
+      - ~/.config/rclone:/home/appuser/.config/rclone:ro
+```
+
+## Example: Complete Setup
+
+See the [rclone-config-mount example](https://github.com/nicotsx/zerobyte/tree/main/examples/rclone-config-mount) in the repository for a complete working configuration.
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:latest
+    container_name: zerobyte
+    restart: unless-stopped
+    ports:
+      - "4096:4096"
+    environment:
+      - TZ=${TZ:-UTC}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+      - ${RCLONE_CONFIG_DIR}:/root/.config/rclone:ro
+```
+
+```bash .env
+TZ=UTC
+RCLONE_CONFIG_DIR=/home/user/.config/rclone
+```
+
+## Verification
+
+To verify rclone is properly configured inside the container:
+
+```bash
+# Check if config is accessible
+docker exec zerobyte ls -la /root/.config/rclone/
+
+# View rclone config
+docker exec zerobyte cat /root/.config/rclone/rclone.conf
+
+# List remotes inside container
+docker exec zerobyte rclone listremotes
+```
+
+## Best Practices
+
+1. **Test on host first** - Always verify rclone works on your Docker host before troubleshooting container issues
+2. **Use descriptive names** - Name remotes clearly (e.g., `personal-gdrive`, `work-dropbox`)
+3. **Read-only mount** - Keep the rclone config mounted as `:ro` for security
+4. **Backup your config** - Store a copy of `~/.config/rclone/rclone.conf` securely
+5. **Monitor tokens** - OAuth tokens can expire; re-authenticate periodically
+6. **Use separate folders** - Create dedicated folders on cloud storage for Zerobyte backups
+
+## Related Resources
+
+- [Official rclone documentation](https://rclone.org/)
+- [Supported storage providers](https://rclone.org/#providers)
+- [Troubleshooting](/advanced/troubleshooting#rclone-issues)
+- [CLI Commands](/advanced/cli-commands)

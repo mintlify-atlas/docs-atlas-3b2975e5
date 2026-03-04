@@ -1,97 +1,161 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Zerobyte Documentation"
+description: "Backup automation platform for self-hosters built on top of Restic"
+mode: "custom"
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#0f1117] via-[#1a1d27] to-[#0f1117] dark:from-[#0f1117] dark:via-[#1a1d27] dark:to-[#0f1117] py-20">
+  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgxNDgsMjAzLDQsMC4xKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-20"></div>
+  
+  <div className="relative max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="text-center">
+      <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 tracking-tight">
+        Powerful Backup Automation
+        <span className="block text-[#94cb04] mt-2">Built on Restic</span>
+      </h1>
+      <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto mb-10 leading-relaxed">
+        Encrypt, compress, and protect your data with automated backups to multiple cloud providers and storage backends
+      </p>
+      
+      <div className="flex flex-wrap justify-center gap-4">
+        <a
+          href="/quickstart"
+          className="inline-flex items-center px-8 py-4 bg-[#94cb04] text-gray-900 font-semibold rounded-lg hover:bg-[#a8d91f] transition-colors duration-200 no-underline"
+        >
+          Get Started
+          <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+        </a>
+        <a
+          href="/api/introduction"
+          className="inline-flex items-center px-8 py-4 border-2 border-white/30 bg-white/10 text-white font-semibold rounded-lg hover:bg-white/20 hover:border-[#94cb04] transition-all duration-200 no-underline"
+        >
+          Explore API
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Quick start</h2>
+  <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">Get Zerobyte up and running in minutes with Docker</p>
+  
+  <Steps>
+    <Step title="Pull and run the Docker image">
+      Create a `docker-compose.yml` file with the Zerobyte configuration:
+      
+      ```yaml docker-compose.yml
+      services:
+        zerobyte:
+          image: ghcr.io/nicotsx/zerobyte:latest
+          container_name: zerobyte
+          restart: unless-stopped
+          cap_add:
+            - SYS_ADMIN
+          ports:
+            - "4096:4096"
+          devices:
+            - /dev/fuse:/dev/fuse
+          environment:
+            - TZ=Europe/Paris
+            - BASE_URL=http://localhost:4096
+            - APP_SECRET=your_secret_here
+          volumes:
+            - /etc/localtime:/etc/localtime:ro
+            - /var/lib/zerobyte:/var/lib/zerobyte
+      ```
+      
+      Then start the container:
+      
+      ```bash
+      docker compose up -d
+      ```
+    </Step>
+    
+    <Step title="Access the web interface">
+      Open your browser and navigate to `http://localhost:4096`. You'll be greeted with the setup wizard to create your first user account.
+    </Step>
+    
+    <Step title="Add your first volume">
+      Configure a volume to back up — this can be a local directory, NFS share, SMB mount, WebDAV endpoint, or SFTP server.
+    </Step>
+    
+    <Step title="Create a repository">
+      Set up a backup repository on your preferred storage backend: local disk, S3, Azure Blob, Google Cloud Storage, or any of 40+ rclone-supported providers.
+    </Step>
+  </Steps>
+</div>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Key features</h2>
+  <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">Everything you need to automate and secure your backups</p>
+  
+  <CardGroup cols={2}>
+    <Card title="Encrypted backups" icon="lock" href="/concepts/repositories">
+      End-to-end encryption powered by Restic ensures your data is always protected, even on untrusted storage
+    </Card>
+    <Card title="Multi-protocol volumes" icon="folder-open" href="/concepts/volumes">
+      Back up from NFS, SMB, WebDAV, SFTP, or local directories — all managed from a single interface
+    </Card>
+    <Card title="40+ storage backends" icon="cloud" href="/advanced/rclone-integration">
+      Store backups on S3, Azure, GCS, or any rclone-supported provider including Dropbox, OneDrive, and Google Drive
+    </Card>
+    <Card title="Flexible scheduling" icon="calendar-days" href="/guides/backup-jobs">
+      Define backup schedules with cron expressions and fine-grained retention policies
+    </Card>
+    <Card title="Snapshot management" icon="camera" href="/concepts/backups">
+      Browse, restore, and manage backup snapshots with file-level granularity
+    </Card>
+    <Card title="Organization support" icon="users" href="/advanced/organizations">
+      Multi-tenant architecture with team management and role-based access control
+    </Card>
+  </CardGroup>
+</div>
 
-## Make it yours
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Explore by topic</h2>
+  <p className="text-lg text-gray-600 dark:text-gray-400 mb-8">Dive into guides and documentation</p>
+  
+  <CardGroup cols={3}>
+    <Card title="Installation" icon="download" href="/installation">
+      Deploy Zerobyte with Docker, including configuration options and security considerations
+    </Card>
+    <Card title="Volumes" icon="hard-drive" href="/guides/adding-volumes">
+      Learn how to configure and mount volume sources for backup
+    </Card>
+    <Card title="Repositories" icon="database" href="/guides/creating-repositories">
+      Set up encrypted backup repositories on your preferred storage backend
+    </Card>
+    <Card title="Backup jobs" icon="clock" href="/guides/backup-jobs">
+      Schedule automated backups with retention policies
+    </Card>
+    <Card title="Restore data" icon="rotate-left" href="/guides/restoring-data">
+      Browse snapshots and restore files or entire volumes
+    </Card>
+    <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting">
+      Diagnose and resolve common issues
+    </Card>
+  </CardGroup>
+</div>
 
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
-
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="bg-gradient-to-r from-[#1a1d27] to-[#242838] dark:from-[#1a1d27] dark:to-[#242838] border border-[#27272a] dark:border-[#27272a] rounded-2xl p-8 md:p-12">
+    <div className="max-w-3xl">
+      <h2 className="text-3xl font-bold text-white mb-4">Ready to secure your data?</h2>
+      <p className="text-lg text-gray-300 mb-6">
+        Start automating your backups today with Zerobyte's powerful, self-hosted backup platform
+      </p>
+      <a
+        href="/quickstart"
+        className="inline-flex items-center px-6 py-3 bg-[#94cb04] text-gray-900 font-semibold rounded-lg hover:bg-[#a8d91f] transition-colors duration-200 no-underline"
+      >
+        Get started now
+        <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</div>

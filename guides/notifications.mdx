@@ -1,0 +1,554 @@
+---
+title: "Notifications"
+description: "Configure alerts for backup events and monitor your backup health"
+---
+
+Stay informed about your backup operations with notifications. Zerobyte can send alerts when backups start, succeed, fail, or complete with warnings through multiple notification channels.
+
+## Notification Channels
+
+Zerobyte supports multiple notification services:
+
+- **Email** - SMTP-based email notifications
+- **Slack** - Slack workspace webhooks
+- **Discord** - Discord server webhooks
+- **Gotify** - Self-hosted notification server
+- **ntfy** - Simple HTTP-based notification service
+- **Pushover** - Mobile push notifications
+- **Telegram** - Telegram bot messages
+- **Generic Webhook** - Custom HTTP endpoints
+- **Custom (Shoutrrr)** - Any service supported by Shoutrrr
+
+## Creating a Notification Destination
+
+<Steps>
+  <Step title="Navigate to Notifications">
+    Click **Settings** in the sidebar, then select the **Notifications** tab.
+  </Step>
+
+  <Step title="Add Destination">
+    Click **Add Notification Destination**.
+  </Step>
+
+  <Step title="Configure Basic Settings">
+    - **Name**: Descriptive name (e.g., "Team Slack Channel")
+    - **Type**: Select your notification service
+    - **Enabled**: Toggle to activate/deactivate
+  </Step>
+
+  <Step title="Configure Service Settings">
+    Enter the connection details for your chosen service. See [Channel Configuration](#channel-configuration) below.
+  </Step>
+
+  <Step title="Test Notification">
+    Click **Test** to send a test message and verify the configuration.
+  </Step>
+
+  <Step title="Save Destination">
+    Click **Create Destination** to save your notification channel.
+  </Step>
+</Steps>
+
+## Channel Configuration
+
+### Email
+
+Send notifications via SMTP email.
+
+**Configuration:**
+- **SMTP Host**: Mail server hostname (e.g., `smtp.gmail.com`)
+- **SMTP Port**: Mail server port (usually 587 for TLS, 465 for SSL)
+- **Username**: SMTP authentication username
+- **Password**: SMTP authentication password
+- **From**: Sender email address
+- **From Name**: Sender display name (optional)
+- **To**: Recipient email addresses (array)
+- **Use TLS**: Enable TLS encryption
+
+**Example (Gmail):**
+```
+SMTP Host: smtp.gmail.com
+SMTP Port: 587
+Username: your-email@gmail.com
+Password: your-app-password
+From: zerobyte@yourdomain.com
+From Name: Zerobyte Backups
+To: ["admin@yourdomain.com", "team@yourdomain.com"]
+Use TLS: Enabled
+```
+
+<Tip>
+For Gmail, use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password.
+</Tip>
+
+### Slack
+
+Send messages to Slack channels via webhooks.
+
+**Configuration:**
+- **Webhook URL**: Incoming webhook URL from Slack
+- **Channel**: Channel to post to (optional, overrides webhook default)
+- **Username**: Bot display name (optional)
+- **Icon Emoji**: Bot icon emoji (optional, e.g., `:robot_face:`)
+
+**Example:**
+```
+Webhook URL: https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX
+Channel: #backups
+Username: Zerobyte
+Icon Emoji: :floppy_disk:
+```
+
+**Setup:**
+1. Go to your Slack workspace settings
+2. Navigate to **Apps** > **Incoming Webhooks**
+3. Click **Add to Slack**
+4. Select a channel and copy the webhook URL
+
+### Discord
+
+Send messages to Discord channels via webhooks.
+
+**Configuration:**
+- **Webhook URL**: Discord webhook URL
+- **Username**: Bot display name (optional)
+- **Avatar URL**: Bot avatar image URL (optional)
+- **Thread ID**: Send to specific thread (optional)
+
+**Example:**
+```
+Webhook URL: https://discord.com/api/webhooks/123456789/abcdefghijklmnop
+Username: Zerobyte Backup Bot
+```
+
+**Setup:**
+1. Open Discord server settings
+2. Go to **Integrations** > **Webhooks**
+3. Click **New Webhook**
+4. Configure the webhook and copy the URL
+
+### Gotify
+
+Self-hosted notification server.
+
+**Configuration:**
+- **Server URL**: Gotify server URL (e.g., `https://gotify.example.com`)
+- **Token**: Application token from Gotify
+- **Path**: Custom path prefix (optional)
+- **Priority**: Message priority (0-10)
+
+**Example:**
+```
+Server URL: https://gotify.yourdomain.com
+Token: AbCdEfGhIjKlMnOp
+Priority: 5
+```
+
+### ntfy
+
+Simple HTTP-based notification service.
+
+**Configuration:**
+- **Server URL**: ntfy server URL (optional, defaults to ntfy.sh)
+- **Topic**: Topic name to publish to
+- **Priority**: Message priority (max, high, default, low, min)
+- **Username**: HTTP basic auth username (optional)
+- **Password**: HTTP basic auth password (optional)
+- **Access Token**: Bearer token for authentication (optional)
+
+**Example (public ntfy.sh):**
+```
+Server URL: https://ntfy.sh
+Topic: zerobyte-backups-abc123
+Priority: high
+```
+
+**Example (self-hosted with auth):**
+```
+Server URL: https://ntfy.yourdomain.com
+Topic: backups
+Priority: default
+Username: zerobyte
+Password: secure-password
+```
+
+### Pushover
+
+Mobile push notifications for iOS and Android.
+
+**Configuration:**
+- **User Key**: Your Pushover user key
+- **API Token**: Your Pushover application API token
+- **Devices**: Specific device names (optional, comma-separated)
+- **Priority**: Message priority (-1, 0, or 1)
+  - `-1`: Quiet notification
+  - `0`: Normal
+  - `1`: High priority
+
+**Example:**
+```
+User Key: u1234567890abcdef
+API Token: a1234567890abcdef
+Priority: 1
+```
+
+**Setup:**
+1. Create a [Pushover account](https://pushover.net/)
+2. Create an application to get an API token
+3. Find your user key in account settings
+
+### Telegram
+
+Send messages via Telegram bot.
+
+**Configuration:**
+- **Bot Token**: Telegram bot token from BotFather
+- **Chat ID**: Chat or channel ID to send messages to
+- **Thread ID**: Topic/thread ID for group topics (optional)
+
+**Example:**
+```
+Bot Token: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+Chat ID: -1001234567890
+```
+
+**Setup:**
+1. Create a bot via [@BotFather](https://t.me/botfather)
+2. Get the bot token
+3. Add bot to your channel/group
+4. Get chat ID using [@getmyid_bot](https://t.me/getmyid_bot)
+
+<Tip>
+For private chats, the Chat ID is your user ID. For groups/channels, it's a negative number starting with `-100`.
+</Tip>
+
+### Generic Webhook
+
+Send custom HTTP requests to any endpoint.
+
+**Configuration:**
+- **URL**: HTTP endpoint URL
+- **Method**: HTTP method (GET or POST)
+- **Content Type**: Request content type (optional)
+- **Headers**: Custom HTTP headers (optional, array)
+- **Use JSON**: Send payload as JSON
+- **Title Key**: JSON key for notification title (optional)
+- **Message Key**: JSON key for notification message (optional)
+
+**Example (JSON POST):**
+```
+URL: https://api.example.com/notifications
+Method: POST
+Content Type: application/json
+Use JSON: Enabled
+Title Key: subject
+Message Key: body
+```
+
+This sends:
+```json
+{
+  "subject": "Backup Success",
+  "body": "Backup 'Daily Media' completed successfully"
+}
+```
+
+**Example (Custom Headers):**
+```
+URL: https://api.example.com/webhooks
+Method: POST
+Headers: [
+  "Authorization: Bearer token123",
+  "X-Custom-Header: value"
+]
+```
+
+### Custom (Shoutrrr)
+
+Use [Shoutrrr](https://containrrr.dev/shoutrrr/) URL format for any supported service.
+
+**Configuration:**
+- **Shoutrrr URL**: Service URL in Shoutrrr format
+
+**Examples:**
+```
+# Slack
+slack://token@channel
+
+# Microsoft Teams
+teams://group@tenant/altId/groupOwner?host=organization.webhook.office.com
+
+# Matrix
+matrix://user:password@homeserver/?rooms=room1,room2
+
+# SMTP
+smtp://username:password@host:port/?from=sender@example.com&to=receiver@example.com
+```
+
+See the [Shoutrrr documentation](https://containrrr.dev/shoutrrr/v0.8/services/overview/) for all supported services and URL formats.
+
+## Assigning Notifications to Backup Schedules
+
+<Steps>
+  <Step title="Open Backup Schedule">
+    Navigate to **Backups** and select a backup schedule.
+  </Step>
+
+  <Step title="Configure Notifications">
+    Click the **Notifications** tab.
+  </Step>
+
+  <Step title="Add Notification">
+    Click **Add Notification** and select a destination.
+  </Step>
+
+  <Step title="Choose Events">
+    Select which events trigger notifications:
+    - **On Start**: When backup begins
+    - **On Success**: When backup completes successfully
+    - **On Warning**: When backup completes with warnings
+    - **On Failure**: When backup fails
+  </Step>
+
+  <Step title="Save Configuration">
+    Click **Save** to apply the notification settings.
+  </Step>
+</Steps>
+
+<Tip>
+You can assign multiple notification destinations to a single backup schedule with different event triggers.
+</Tip>
+
+## Notification Events
+
+### Start
+
+Triggered when a backup begins.
+
+**Use cases:**
+- Monitor backup timing
+- Verify scheduled jobs are running
+- Track backup duration
+
+**Example message:**
+```
+Backup Started: Daily Media Backup
+Volume: Media Server
+Repository: AWS S3 Backups
+Time: 2024-03-04 02:00:00
+```
+
+### Success
+
+Triggered when a backup completes successfully.
+
+**Use cases:**
+- Confirm backups are working
+- Track completion times
+- Monitor backup health
+
+**Example message:**
+```
+Backup Successful: Daily Media Backup
+Volume: Media Server
+Repository: AWS S3 Backups
+Duration: 15m 32s
+Files: 1,234 (5.2 GB)
+Time: 2024-03-04 02:15:32
+```
+
+### Warning
+
+Triggered when a backup completes but encountered non-fatal issues.
+
+**Use cases:**
+- Identify partial failures
+- Track permission issues
+- Monitor file access problems
+
+**Example message:**
+```
+Backup Warning: Daily Media Backup
+Volume: Media Server
+Repository: AWS S3 Backups
+Warnings: 3 files could not be read (permission denied)
+Duration: 15m 32s
+Time: 2024-03-04 02:15:32
+```
+
+### Failure
+
+Triggered when a backup fails completely.
+
+**Use cases:**
+- Alert on critical issues
+- Immediate incident response
+- Track system problems
+
+**Example message:**
+```
+Backup Failed: Daily Media Backup
+Volume: Media Server
+Repository: AWS S3 Backups
+Error: Failed to connect to repository
+Time: 2024-03-04 02:00:15
+```
+
+## Notification Best Practices
+
+<AccordionGroup>
+  <Accordion title="Configure failure notifications">
+    Always enable failure notifications for critical backup jobs. You need to know immediately when backups aren't working.
+  </Accordion>
+
+  <Accordion title="Avoid notification fatigue">
+    For frequent backups (hourly), consider only notifying on failures and warnings. Success notifications can be daily summaries.
+  </Accordion>
+
+  <Accordion title="Use different channels for different priorities">
+    - Critical failures: Pushover, Telegram (immediate)
+    - Daily summaries: Email, Slack
+    - All events: Dedicated logging channel
+  </Accordion>
+
+  <Accordion title="Test notification channels regularly">
+    Use the **Test** button to verify notifications are working, especially after configuration changes.
+  </Accordion>
+
+  <Accordion title="Secure sensitive information">
+    Use secret references for API tokens and passwords instead of storing them directly:
+    ```
+    Bot Token: env://TELEGRAM_BOT_TOKEN
+    API Token: file://pushover_token
+    ```
+  </Accordion>
+
+  <Accordion title="Monitor notification delivery">
+    Check that notifications are being delivered. A failed backup notification that isn't received defeats the purpose.
+  </Accordion>
+</AccordionGroup>
+
+## Notification Templates
+
+Common notification setups:
+
+### Critical Production Systems
+
+```
+Events:
+- ✅ On Failure (Pushover, Telegram)
+- ✅ On Warning (Slack)
+- ❌ On Success (too frequent)
+- ❌ On Start (not needed)
+```
+
+### Development/Test Systems
+
+```
+Events:
+- ✅ On Failure (Email)
+- ❌ On Warning (not critical)
+- ❌ On Success (not needed)
+- ❌ On Start (not needed)
+```
+
+### Comprehensive Monitoring
+
+```
+Events:
+- ✅ On Start (Discord #backup-logs)
+- ✅ On Success (Discord #backup-logs)
+- ✅ On Warning (Slack #alerts, Email)
+- ✅ On Failure (Slack #alerts, Email, Pushover)
+```
+
+### Weekly Summary Only
+
+```
+Events:
+- ❌ On Start
+- ✅ On Success (Email - weekly backup)
+- ✅ On Warning (Email)
+- ✅ On Failure (Email, Slack)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Test notifications succeed but real notifications don't send">
+    - Check that the destination is enabled
+    - Verify event triggers are configured on the backup schedule
+    - Review container logs for notification errors
+    - Ensure the destination hasn't been deleted
+  </Accordion>
+
+  <Accordion title="Notifications are delayed">
+    - Some services have rate limits
+    - Check network connectivity to notification services
+    - Review service status pages for outages
+  </Accordion>
+
+  <Accordion title="Email notifications marked as spam">
+    - Configure SPF/DKIM records for your domain
+    - Use a reputable SMTP provider
+    - Avoid spam trigger words in notification text
+    - Check recipient spam folders
+  </Accordion>
+
+  <Accordion title="Webhook notifications fail">
+    - Verify the webhook URL is correct and accessible
+    - Check for SSL/TLS certificate issues
+    - Review webhook service logs for errors
+    - Test with curl to isolate the issue
+  </Accordion>
+
+  <Accordion title="Too many notifications">
+    - Reduce event triggers (disable On Start/On Success)
+    - Consolidate multiple destinations
+    - Use summary notifications instead of per-event
+  </Accordion>
+</AccordionGroup>
+
+## Managing Notification Destinations
+
+### Editing Destinations
+
+1. Navigate to **Settings** > **Notifications**
+2. Click on a destination to edit
+3. Modify settings as needed
+4. Click **Test** to verify changes
+5. Save the updated configuration
+
+### Disabling Destinations
+
+Temporarily disable notifications without deleting the configuration:
+
+1. Edit the notification destination
+2. Toggle **Enabled** to off
+3. Save changes
+
+<Tip>
+Disabled destinations remain assigned to backup schedules but won't send notifications.
+</Tip>
+
+### Deleting Destinations
+
+<Warning>
+Deleting a destination removes it from all backup schedules.
+</Warning>
+
+1. Navigate to **Settings** > **Notifications**
+2. Click the delete icon next to the destination
+3. Confirm deletion
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Backup Jobs" icon="clock" href="/guides/backup-jobs">
+    Configure automated backup schedules
+  </Card>
+  
+  <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting">
+    Resolve common issues and errors
+  </Card>
+</CardGroup>

@@ -1,0 +1,418 @@
+---
+title: Environment Variables
+description: Complete reference for all Zerobyte environment variables
+---
+
+Zerobyte can be configured using environment variables in your `docker-compose.yml` or `.env` file. This page documents all available options.
+
+## Required Variables
+
+These variables must be set for Zerobyte to function properly.
+
+### APP_SECRET
+
+**Required** - A secret key used to encrypt sensitive data in the database.
+
+- **Type:** String
+- **Minimum length:** 32 characters
+- **Maximum length:** 256 characters
+- **Default:** None (must be set)
+
+```yaml
+environment:
+  - APP_SECRET=94bad46c66e25d5c2b  # Generate with: openssl rand -hex 32
+```
+
+<Warning>
+  Store this secret securely and back it up. If lost, encrypted data in the database will be **unrecoverable**.
+</Warning>
+
+**Generate a secure secret:**
+
+```bash
+openssl rand -hex 32
+```
+
+### BASE_URL
+
+**Required** - The base URL where your Zerobyte instance will be accessed.
+
+- **Type:** String (valid URL)
+- **Default:** None (must be set)
+- **Examples:** 
+  - `http://192.168.1.50:4096`
+  - `http://localhost:4096`
+  - `https://zerobyte.example.com`
+
+```yaml
+environment:
+  - BASE_URL=http://localhost:4096
+```
+
+<Note>
+  The protocol (`http://` or `https://`) affects cookie security. See [Authentication](/configuration/authentication) for details.
+</Note>
+
+## Server Configuration
+
+### PORT
+
+The port the web interface and API will listen on.
+
+- **Type:** Integer
+- **Default:** `4096`
+
+```yaml
+environment:
+  - PORT=4096
+ports:
+  - "4096:4096"  # Ensure port mapping matches
+```
+
+### SERVER_IP
+
+The IP address the server will bind to.
+
+- **Type:** String
+- **Default:** `localhost`
+
+```yaml
+environment:
+  - SERVER_IP=0.0.0.0  # Listen on all interfaces
+```
+
+### SERVER_IDLE_TIMEOUT
+
+Idle timeout for the server in seconds.
+
+- **Type:** Integer (as string)
+- **Default:** `60`
+
+```yaml
+environment:
+  - SERVER_IDLE_TIMEOUT=120
+```
+
+## Environment & Logging
+
+### NODE_ENV
+
+The application environment mode.
+
+- **Type:** Enum (`development`, `production`, `test`)
+- **Default:** `production`
+
+```yaml
+environment:
+  - NODE_ENV=production
+```
+
+<Note>
+  This is automatically set in the Docker image. You typically don't need to change this.
+</Note>
+
+### LOG_LEVEL
+
+Logging verbosity level.
+
+- **Type:** Enum (`debug`, `info`, `warn`, `error`)
+- **Default:** `info` (production), `debug` (development)
+
+```yaml
+environment:
+  - LOG_LEVEL=debug  # Enable verbose logging
+```
+
+### TZ
+
+Timezone for the container. **Crucial for accurate backup scheduling.**
+
+- **Type:** String (TZ database name)
+- **Default:** `UTC`
+- **Examples:** `Europe/Paris`, `America/New_York`, `Asia/Tokyo`
+
+```yaml
+environment:
+  - TZ=Europe/Paris
+volumes:
+  - /etc/localtime:/etc/localtime:ro  # Sync with host timezone
+```
+
+## Security & Access Control
+
+### TRUSTED_ORIGINS
+
+Comma-separated list of additional trusted origins for CORS.
+
+- **Type:** String (comma-separated URLs)
+- **Default:** None (only `BASE_URL` is trusted)
+
+```yaml
+environment:
+  - TRUSTED_ORIGINS=http://localhost:3000,http://example.com
+```
+
+<Note>
+  The `BASE_URL` is automatically added to the trusted origins list.
+</Note>
+
+### DISABLE_RATE_LIMITING
+
+Disable rate limiting for API requests.
+
+- **Type:** String (`true` or `false`)
+- **Default:** `false`
+
+```yaml
+environment:
+  - DISABLE_RATE_LIMITING=true  # Not recommended for production
+```
+
+<Warning>
+  Only disable rate limiting for development or testing purposes.
+</Warning>
+
+## Restic Configuration
+
+### RESTIC_HOSTNAME
+
+The hostname used by Restic when creating snapshots.
+
+- **Type:** String
+- **Default:** `zerobyte` (auto-detected from container hostname)
+
+```yaml
+environment:
+  - RESTIC_HOSTNAME=myserver
+```
+
+<Note>
+  If you set a custom hostname in Docker, Zerobyte will automatically detect it. You only need to set this variable if you want to override the detected hostname.
+</Note>
+
+### RESTIC_CACHE_DIR
+
+Path to the Restic cache directory inside the container.
+
+- **Type:** String (path)
+- **Default:** `/var/lib/zerobyte/restic/cache`
+
+```yaml
+environment:
+  - RESTIC_CACHE_DIR=/custom/cache/path
+```
+
+### RESTIC_PASS_FILE
+
+Path to the Restic password file inside the container.
+
+- **Type:** String (path)
+- **Default:** `/var/lib/zerobyte/data/restic.pass`
+
+```yaml
+environment:
+  - RESTIC_PASS_FILE=/var/lib/zerobyte/data/restic.pass
+```
+
+## Storage Paths
+
+These variables control where Zerobyte stores data inside the container.
+
+### ZEROBYTE_DATABASE_URL
+
+Path to the SQLite database file.
+
+- **Type:** String (path)
+- **Default:** `/var/lib/zerobyte/data/zerobyte.db`
+
+```yaml
+environment:
+  - ZEROBYTE_DATABASE_URL=/var/lib/zerobyte/data/zerobyte.db
+```
+
+### ZEROBYTE_VOLUMES_DIR
+
+Base directory for mounting remote volumes.
+
+- **Type:** String (path)
+- **Default:** `/var/lib/zerobyte/volumes`
+
+```yaml
+environment:
+  - ZEROBYTE_VOLUMES_DIR=/var/lib/zerobyte/volumes
+```
+
+### ZEROBYTE_REPOSITORIES_DIR
+
+Base directory for local repositories.
+
+- **Type:** String (path)
+- **Default:** `/var/lib/zerobyte/repositories`
+
+```yaml
+environment:
+  - ZEROBYTE_REPOSITORIES_DIR=/var/lib/zerobyte/repositories
+```
+
+## Rclone Configuration
+
+### RCLONE_CONFIG_DIR
+
+Path to the rclone config directory inside the container.
+
+- **Type:** String (path)
+- **Default:** `/root/.config/rclone`
+
+```yaml
+environment:
+  - RCLONE_CONFIG_DIR=/home/appuser/.config/rclone  # For non-root users
+volumes:
+  - ~/.config/rclone:/home/appuser/.config/rclone:ro
+```
+
+<Note>
+  Change this if your container runs as a non-root user (e.g., TrueNAS apps).
+</Note>
+
+## Development Options
+
+### ENABLE_DEV_PANEL
+
+Enable the development panel for debugging.
+
+- **Type:** String (`true` or `false`)
+- **Default:** `false`
+
+```yaml
+environment:
+  - ENABLE_DEV_PANEL=true
+```
+
+<Warning>
+  Only enable this in development environments. Never enable in production.
+</Warning>
+
+### APP_VERSION
+
+Override the application version string.
+
+- **Type:** String
+- **Default:** `dev`
+
+```yaml
+environment:
+  - APP_VERSION=v0.29
+```
+
+### MIGRATIONS_PATH
+
+Custom path for database migrations.
+
+- **Type:** String (path)
+- **Default:** None (uses default location)
+
+```yaml
+environment:
+  - MIGRATIONS_PATH=/custom/migrations
+```
+
+## Secret References
+
+For enhanced security, Zerobyte supports dynamic secret resolution for sensitive fields in volume and repository configurations.
+
+Instead of storing encrypted secrets in the database, you can reference them using:
+
+### Environment Variable Secrets
+
+Prefix: `env://VAR_NAME`
+
+```yaml
+environment:
+  - ZEROBYTE_SMB_PASSWORD=mysecretpassword
+```
+
+Then in Zerobyte's UI, set the password field to: `env://ZEROBYTE_SMB_PASSWORD`
+
+### File-based Secrets (Docker Secrets)
+
+Prefix: `file://SECRET_NAME`
+
+```yaml
+secrets:
+  - smb_password
+
+secrets:
+  smb_password:
+    file: ./smb-password.txt
+```
+
+Then in Zerobyte's UI, set the password field to: `file://smb_password`
+
+The secret will be read from `/run/secrets/smb_password` (standard Docker Secrets path).
+
+## Complete Example
+
+Here's a complete `docker-compose.yml` with all common environment variables:
+
+```yaml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    ports:
+      - "4096:4096"
+    environment:
+      # Required
+      - BASE_URL=https://zerobyte.example.com
+      - APP_SECRET=94bad46c66e25d5c2b  # openssl rand -hex 32
+      
+      # Server
+      - PORT=4096
+      - TZ=Europe/Paris
+      
+      # Logging
+      - LOG_LEVEL=info
+      
+      # Security
+      - TRUSTED_ORIGINS=http://localhost:3000
+      
+      # Restic
+      - RESTIC_HOSTNAME=myserver
+      
+      # Rclone
+      - RCLONE_CONFIG_DIR=/root/.config/rclone
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+      - ~/.config/rclone:/root/.config/rclone:ro
+```
+
+## Local Development
+
+When running Zerobyte without Docker for development, create a `.env.local` file:
+
+```bash
+# Database and storage
+ZEROBYTE_DATABASE_URL=./data/zerobyte.db
+RESTIC_PASS_FILE=./data/restic.pass
+RESTIC_CACHE_DIR=./data/restic/cache
+ZEROBYTE_REPOSITORIES_DIR=./data/repositories
+ZEROBYTE_VOLUMES_DIR=./data/volumes
+
+# Required
+APP_SECRET=your_app_secret_here
+BASE_URL=http://localhost:4096
+
+# Optional
+LOG_LEVEL=debug
+ENABLE_DEV_PANEL=true
+```
+
+<Note>
+  Remote mount backends (NFS/SMB/WebDAV/SFTP) require Linux mount tooling and `CAP_SYS_ADMIN`, so they may not work on macOS during local development.
+</Note>

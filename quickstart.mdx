@@ -1,80 +1,596 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Set up your first backup in minutes with Zerobyte
 ---
 
-## Get started in three steps
+# Quick Start Guide
 
-Get your documentation site running locally and make your first customization.
+This guide walks you through creating your first backup in Zerobyte, from initial setup to verifying a successful backup.
 
-### Step 1: Set up your local environment
+<Info>
+  This guide assumes you've already [installed Zerobyte](/installation) and can access the web interface.
+</Info>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Overview
 
-### Step 2: Deploy your changes
+Setting up a backup involves three key steps:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Add a Volume">
+    Define the source data you want to backup
+  </Step>
+  
+  <Step title="Create a Repository">
+    Set up an encrypted storage destination for your backups
+  </Step>
+  
+  <Step title="Configure a Backup Job">
+    Connect your volume to your repository with scheduling and retention policies
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+Let's walk through each step.
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## First-Time Setup
 
-### Step 3: Go live
+### Create Your Admin Account
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+When you first access Zerobyte at `http://<your-server-ip>:4096`, you'll be prompted to create an admin account:
 
-## Next steps
+<Steps>
+  <Step title="Open Zerobyte">
+    Navigate to the URL you configured in `BASE_URL` during installation
+  </Step>
+  
+  <Step title="Complete Registration">
+    Enter your desired username, email, and password for the admin account
+  </Step>
+  
+  <Step title="Save Restic Password">
+    After registration, you'll be prompted to download your Restic encryption password. **This is critical** - store it safely!
+  </Step>
+</Steps>
 
-Now that you have your docs running, explore these key features:
+<Warning>
+  **Critical**: The Restic password is used to encrypt all your backups. If you lose this password, you will **not** be able to restore your data. Save it in a password manager or secure location immediately.
+</Warning>
 
-<CardGroup cols={2}>
+## Step 1: Add a Volume
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+A **volume** represents the source data you want to backup. Zerobyte supports various volume types including local directories, NFS shares, SMB shares, WebDAV, and SFTP.
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+### Adding a Local Directory
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+For this quick start, we'll add a local directory. First, ensure the directory is mounted into your Zerobyte container.
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+#### Mount the Directory
 
-</CardGroup>
+Update your `docker-compose.yml` to mount the directory you want to backup:
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    # ... other configuration ...
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+      - /path/to/your/data:/data  # Add this line
+```
+
+Restart the container to apply changes:
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+#### Create the Volume in Zerobyte
+
+<Steps>
+  <Step title="Navigate to Volumes">
+    In the Zerobyte web interface, click on **Volumes** in the sidebar
+  </Step>
+  
+  <Step title="Create New Volume">
+    Click the **Create Volume** button
+  </Step>
+  
+  <Step title="Configure Volume">
+    Fill in the volume details:
+    - **Name**: Give it a descriptive name (e.g., "My Documents")
+    - **Type**: Select "Directory"
+    - **Path**: Enter the container path (e.g., `/data`)
+  </Step>
+  
+  <Step title="Save Volume">
+    Click **Create** to save the volume configuration
+  </Step>
+</Steps>
+
+<Tip>
+  The volume path must match the path **inside the container**, not the host path. In the example above, even though the host path is `/path/to/your/data`, you would enter `/data` as the volume path.
+</Tip>
+
+### Adding Remote Volumes
+
+Zerobyte also supports remote volume types:
+
+<Tabs>
+  <Tab title="NFS">
+    Configure an NFS share:
+    - **Host**: NFS server hostname or IP
+    - **Export**: NFS export path (e.g., `/mnt/data`)
+    - **Options**: Mount options (optional, e.g., `vers=4,soft`)
+  </Tab>
+  
+  <Tab title="SMB/CIFS">
+    Configure an SMB/CIFS share:
+    - **Host**: SMB server hostname or IP
+    - **Share**: Share name
+    - **Username**: SMB username
+    - **Password**: SMB password (can use `env://` or `file://` secrets)
+    - **Domain**: Windows domain (optional)
+  </Tab>
+  
+  <Tab title="WebDAV">
+    Configure a WebDAV server:
+    - **URL**: WebDAV server URL
+    - **Username**: WebDAV username
+    - **Password**: WebDAV password
+  </Tab>
+  
+  <Tab title="SFTP">
+    Configure an SFTP server:
+    - **Host**: SFTP server hostname or IP
+    - **Port**: SFTP port (default: 22)
+    - **Username**: SSH username
+    - **Password/Key**: SSH password or private key
+  </Tab>
+</Tabs>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Remote volumes require the full installation with `SYS_ADMIN` capability and `/dev/fuse` device. See the [Installation guide](/installation) for details.
 </Note>
+
+## Step 2: Create a Repository
+
+A **repository** is the encrypted storage destination where your backups will be stored. Zerobyte supports multiple repository backends.
+
+### Creating a Local Repository
+
+For this quick start, we'll create a local repository:
+
+<Steps>
+  <Step title="Navigate to Repositories">
+    Click on **Repositories** in the sidebar
+  </Step>
+  
+  <Step title="Create New Repository">
+    Click the **Create Repository** button
+  </Step>
+  
+  <Step title="Configure Repository">
+    Fill in the repository details:
+    - **Name**: Descriptive name (e.g., "Local Backup Repository")
+    - **Type**: Select "Local"
+    - **Path**: Enter a path for the repository (e.g., `/var/lib/zerobyte/repositories/local-backup`)
+  </Step>
+  
+  <Step title="Initialize Repository">
+    Click **Create and Initialize**. Zerobyte will create and initialize the Restic repository with encryption.
+  </Step>
+</Steps>
+
+<Info>
+  Repository initialization may take a few seconds. Zerobyte will create the repository structure and configure encryption using your Restic password.
+</Info>
+
+### Cloud Storage Repositories
+
+For production use, consider using cloud storage for offsite backups:
+
+<Tabs>
+  <Tab title="S3-Compatible">
+    Configure S3-compatible storage (AWS S3, MinIO, Wasabi, Backblaze B2, etc.):
+    
+    ```yaml Repository Configuration
+    Type: S3
+    Endpoint: s3.amazonaws.com (or custom endpoint)
+    Region: us-east-1
+    Bucket: my-backup-bucket
+    Path: backups/zerobyte (optional prefix)
+    Access Key ID: AKIAIOSFODNN7EXAMPLE
+    Secret Access Key: env://S3_SECRET_KEY
+    ```
+    
+    <Tip>
+      Use `env://` secret references to avoid storing credentials in the database. See [Installation - Docker Secrets](/installation#using-docker-secrets-for-sensitive-data).
+    </Tip>
+  </Tab>
+  
+  <Tab title="Google Cloud Storage">
+    Configure Google Cloud Storage:
+    
+    ```yaml Repository Configuration
+    Type: Google Cloud Storage
+    Project ID: my-project-id
+    Bucket: my-backup-bucket
+    Path: backups/zerobyte (optional prefix)
+    Service Account JSON: Upload credentials file
+    ```
+  </Tab>
+  
+  <Tab title="Azure Blob">
+    Configure Azure Blob Storage:
+    
+    ```yaml Repository Configuration
+    Type: Azure Blob Storage
+    Account Name: myaccountname
+    Container: backups
+    Path: zerobyte (optional prefix)
+    Account Key: env://AZURE_ACCOUNT_KEY
+    ```
+  </Tab>
+  
+  <Tab title="rclone">
+    Configure rclone-based storage (requires rclone config mounted):
+    
+    ```yaml Repository Configuration
+    Type: rclone
+    Remote: gdrive (must exist in rclone config)
+    Path: backups/zerobyte
+    ```
+    
+    <Note>
+      rclone must be configured on the host and mounted into the container. See [Installation - Mounting rclone Configuration](/installation#mounting-rclone-configuration).
+    </Note>
+  </Tab>
+</Tabs>
+
+## Step 3: Create a Backup Job
+
+A **backup job** connects a volume to a repository and defines when and how backups should run.
+
+<Steps>
+  <Step title="Navigate to Backups">
+    Click on **Backups** in the sidebar
+  </Step>
+  
+  <Step title="Create New Backup Job">
+    Click the **Create Backup Job** button
+  </Step>
+  
+  <Step title="Configure Basic Settings">
+    - **Name**: Descriptive name (e.g., "Daily Documents Backup")
+    - **Volume**: Select the volume you created earlier
+    - **Repository**: Select the repository you created earlier
+    - **Enabled**: Toggle on to enable the job
+  </Step>
+  
+  <Step title="Configure Schedule">
+    Set when backups should run:
+    - **Schedule Type**: Choose "Simple" or "Cron"
+    - **Simple**: Select daily, weekly, etc.
+    - **Cron**: Enter cron expression (e.g., `0 2 * * *` for 2 AM daily)
+    
+    <Accordion title="Common Cron Patterns">
+      - `0 2 * * *` - Daily at 2:00 AM
+      - `0 2 * * 0` - Weekly on Sunday at 2:00 AM
+      - `0 2 1 * *` - Monthly on the 1st at 2:00 AM
+      - `0 */6 * * *` - Every 6 hours
+      - `0 0 * * 1-5` - Weekdays at midnight
+    </Accordion>
+  </Step>
+  
+  <Step title="Configure Retention Policy">
+    Define how long backups should be kept:
+    
+    ```yaml Example Retention Policy
+    Keep Last: 7 daily backups
+    Keep Last: 4 weekly backups
+    Keep Last: 6 monthly backups
+    Keep Last: 1 yearly backup
+    ```
+    
+    <Info>
+      Retention policies automatically prune old backups to save storage space. Restic's deduplication ensures you only store unique data.
+    </Info>
+  </Step>
+  
+  <Step title="Configure Paths (Optional)">
+    By default, the entire volume is backed up. You can specify:
+    - **Include paths**: Only backup specific subdirectories
+    - **Exclude paths**: Exclude specific files or patterns (e.g., `*.tmp`, `node_modules/`)
+  </Step>
+  
+  <Step title="Advanced Options (Optional)">
+    Configure advanced settings:
+    - **Compression**: Enable to reduce backup size (slight CPU overhead)
+    - **Bandwidth Limit**: Limit upload/download speed
+    - **Parallel Upload**: Number of parallel file uploads
+  </Step>
+  
+  <Step title="Save Backup Job">
+    Click **Create** to save the backup job. It will run according to the schedule you configured.
+  </Step>
+</Steps>
+
+## Step 4: Run Your First Backup
+
+Instead of waiting for the scheduled time, let's run the backup immediately:
+
+<Steps>
+  <Step title="Find Your Backup Job">
+    In the **Backups** section, locate the job you just created
+  </Step>
+  
+  <Step title="Run Backup Manually">
+    Click the **Run Now** button (play icon) next to your backup job
+  </Step>
+  
+  <Step title="Monitor Progress">
+    Watch the backup progress in real-time:
+    - Files scanned
+    - Data processed
+    - Upload progress
+    - Estimated time remaining
+  </Step>
+  
+  <Step title="Wait for Completion">
+    The backup will show a success status when complete. Duration depends on data size and storage speed.
+  </Step>
+</Steps>
+
+<Tip>
+  During the first backup, all data is uploaded. Subsequent backups are much faster due to Restic's incremental backup and deduplication.
+</Tip>
+
+## Step 5: Verify Your Backup
+
+After the backup completes, verify it was successful:
+
+<Steps>
+  <Step title="View Backup Details">
+    Click on your backup job to view details
+  </Step>
+  
+  <Step title="Check Snapshots">
+    You should see at least one snapshot listed with:
+    - Snapshot timestamp
+    - Number of files backed up
+    - Total size
+    - New data added (vs. deduplicated)
+  </Step>
+  
+  <Step title="Browse Backup Contents">
+    Click on a snapshot to browse its contents. You can:
+    - Navigate the directory structure
+    - View file sizes and modification times
+    - Search for specific files
+  </Step>
+  
+  <Step title="Test Restore (Optional)">
+    For peace of mind, test restoring a file:
+    - Select a file from the snapshot browser
+    - Click **Restore**
+    - Choose restore location
+    - Verify the file was restored correctly
+  </Step>
+</Steps>
+
+<Warning>
+  By default, restored files are placed back in their original location. Be careful not to overwrite current files. You can specify an alternate restore path if needed.
+</Warning>
+
+## Understanding Backup Status
+
+Your backup dashboard shows the status of all backup jobs:
+
+| Status | Description |
+|--------|-------------|
+| **Success** | Backup completed without errors |
+| **Running** | Backup currently in progress |
+| **Failed** | Backup encountered an error (check logs) |
+| **Scheduled** | Backup waiting for next scheduled run |
+| **Disabled** | Backup job is disabled and won't run |
+
+<Info>
+  Click on any backup job to view detailed logs, snapshot history, and statistics.
+</Info>
+
+## Monitoring Your Backups
+
+Zerobyte provides several ways to monitor backup health:
+
+### Dashboard Overview
+
+The main dashboard shows:
+- Total number of backup jobs
+- Storage usage across all repositories
+- Recent backup activity
+- Failed backups requiring attention
+
+### Backup Job Details
+
+Each backup job displays:
+- Last run time and status
+- Next scheduled run
+- Number of snapshots
+- Total backup size
+- Backup duration trends
+
+### Repository Health
+
+Repository details show:
+- Total size and file count
+- Deduplication ratio
+- Number of snapshots
+- Integrity check status
+
+<Tip>
+  Regularly check repository integrity using the **Check** button in the repository details. This verifies backup data hasn't been corrupted.
+</Tip>
+
+## Next Steps
+
+Now that you have a working backup, consider:
+
+<CardGroup cols={2}>
+  <Card title="Add More Volumes" icon="folder-plus">
+    Back up additional directories or remote shares
+  </Card>
+  
+  <Card title="Set Up Cloud Storage" icon="cloud">
+    Configure offsite backups to S3, Google Cloud, or Azure
+  </Card>
+  
+  <Card title="Configure Notifications" icon="bell">
+    Get alerted when backups fail or complete
+  </Card>
+  
+  <Card title="Optimize Retention" icon="clock-rotate-left">
+    Fine-tune retention policies to balance storage and history
+  </Card>
+</CardGroup>
+
+## Common Tasks
+
+### Restoring Data
+
+To restore data from a backup:
+
+<Steps>
+  <Step title="Navigate to Backup">
+    Go to **Backups** and select the backup job containing the data you need
+  </Step>
+  
+  <Step title="Select Snapshot">
+    Choose the snapshot from the time period you want to restore from
+  </Step>
+  
+  <Step title="Browse and Select">
+    Browse the file tree and select files/folders to restore
+  </Step>
+  
+  <Step title="Choose Restore Location">
+    Decide whether to restore to original location or specify a new path
+  </Step>
+  
+  <Step title="Restore">
+    Click **Restore** and wait for the operation to complete
+  </Step>
+</Steps>
+
+### Pausing a Backup Job
+
+To temporarily stop a backup from running:
+
+1. Navigate to the backup job
+2. Toggle the **Enabled** switch to off
+3. The job will skip scheduled runs until re-enabled
+
+### Viewing Backup Logs
+
+To troubleshoot issues or view detailed backup information:
+
+1. Click on a backup job
+2. Navigate to the **Logs** tab
+3. View detailed output from Restic including:
+   - Files processed
+   - Errors encountered
+   - Performance statistics
+
+### Deleting Old Snapshots
+
+Backups are automatically pruned according to retention policies, but you can manually delete snapshots:
+
+1. Navigate to backup job
+2. Select the snapshot you want to delete
+3. Click **Delete Snapshot**
+4. Confirm deletion
+
+<Warning>
+  Deleting snapshots is irreversible. Ensure you don't need the data before deleting.
+</Warning>
+
+## Troubleshooting
+
+### Backup Failed: Permission Denied
+
+Ensure the volume directory has proper permissions:
+
+```bash
+# On the host system
+sudo chmod -R 755 /path/to/your/data
+```
+
+### Backup Running Slowly
+
+Check:
+- Network bandwidth (for cloud repositories)
+- Disk I/O performance
+- Enable compression if uploading large compressible files
+- Adjust parallel upload settings
+
+### Repository Initialization Failed
+
+Verify:
+- Repository path is writable
+- For cloud repositories, credentials are correct
+- Network connectivity to cloud storage
+
+### Can't Find Mounted Directory
+
+Ensure:
+- Directory is mounted in `docker-compose.yml`
+- Container was restarted after mounting: `docker compose restart`
+- Path matches the container path, not host path
+
+## Getting Help
+
+If you encounter issues:
+
+<CardGroup cols={2}>
+  <Card title="Check Logs" icon="file-lines">
+    View detailed logs with `docker compose logs -f zerobyte`
+  </Card>
+  
+  <Card title="GitHub Issues" icon="github">
+    Report bugs or request features at [github.com/nicotsx/zerobyte/issues](https://github.com/nicotsx/zerobyte/issues)
+  </Card>
+  
+  <Card title="Documentation" icon="book">
+    Explore the full documentation for advanced topics
+  </Card>
+  
+  <Card title="Community" icon="users">
+    Join discussions and get help from other users
+  </Card>
+</CardGroup>
+
+<Info>
+  When reporting issues, include:
+  - Zerobyte version (visible in UI footer)
+  - Docker and Docker Compose versions
+  - Relevant logs from `docker compose logs zerobyte`
+  - Steps to reproduce the issue
+</Info>
+
+## Conclusion
+
+You've successfully:
+
+- ✅ Created an admin account and secured your Restic password
+- ✅ Added a volume to backup
+- ✅ Created a repository for encrypted storage
+- ✅ Configured and ran your first backup job
+- ✅ Verified your backup was successful
+
+Your data is now protected with encrypted, deduplicated backups. Zerobyte will continue to run backups automatically according to your schedule.
+
+<Tip>
+  **Important Reminder**: Keep your Restic encryption password safe! Without it, you cannot restore your backups. Consider storing it in multiple secure locations.
+</Tip>

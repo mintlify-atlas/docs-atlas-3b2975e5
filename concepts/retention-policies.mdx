@@ -1,0 +1,546 @@
+---
+title: "Retention Policies"
+description: "Configure how long backup snapshots are kept using time-based and count-based retention rules"
+---
+
+## What are retention policies?
+
+Retention policies define how long backup snapshots are kept before being automatically deleted. Instead of accumulating snapshots indefinitely (consuming storage and increasing costs), retention policies prune old snapshots based on:
+
+- **Age** - Keep snapshots created within a time window (e.g., last 30 days)
+- **Count** - Keep a specific number of snapshots per time bucket (e.g., last 7 daily snapshots)
+- **Category** - Keep snapshots in hourly, daily, weekly, monthly, or yearly buckets
+
+Retention policies are applied automatically after each successful backup using Restic's `forget` command.
+
+## Why retention policies matter
+
+Without retention policies, your repositories would:
+
+- **Grow unbounded** - Every backup adds more data, even if 99% is duplicated
+- **Increase costs** - Storage fees scale with repository size
+- **Slow down operations** - Large snapshot indexes take longer to load
+- **Complicate recovery** - Thousands of snapshots make finding the right restore point difficult
+
+Retention policies balance:
+- **Recoverability** - Enough snapshots to restore to multiple points in time
+- **Storage efficiency** - Remove redundant old snapshots
+- **Compliance** - Meet data retention regulations
+
+## How retention policies work
+
+Retention policies use a "keep" model rather than "delete" model. You specify what to keep, and Restic removes everything else.
+
+### The forget workflow
+
+1. **Tag filtering** - Only snapshots with the backup schedule's tag are evaluated
+2. **Categorization** - Snapshots are grouped into time buckets (hourly, daily, weekly, etc.)
+3. **Selection** - Within each bucket, the most recent snapshot is kept (up to the limit)
+4. **Marking** - All other snapshots are marked for removal
+5. **Prune** - Marked snapshots are deleted and storage is reclaimed
+
+<Note>
+The `forget` operation only marks snapshots for deletion. To actually reclaim storage space, run `prune` (automatically handled by the "doctor" operation).
+</Note>
+
+## Retention policy rules
+
+Zerobyte supports six retention rules that can be combined:
+
+### Keep last N snapshots
+
+```json
+{
+  "keepLast": 10
+}
+```
+
+Keeps the 10 most recent snapshots, regardless of age or category.
+
+**Use case:** Simple retention for frequently changing data. Ensures you always have the last N backups available.
+
+### Keep hourly snapshots
+
+```json
+{
+  "keepHourly": 24
+}
+```
+
+Keeps one snapshot per hour for the last 24 hours.
+
+**How it works:**
+- Snapshots are grouped into 1-hour buckets
+- The most recent snapshot in each bucket is kept
+- Older hourly snapshots are removed
+
+**Use case:** Fine-grained recovery for rapidly changing data (databases, active development).
+
+### Keep daily snapshots
+
+```json
+{
+  "keepDaily": 7
+}
+```
+
+Keeps one snapshot per day for the last 7 days.
+
+**How it works:**
+- Snapshots are grouped by calendar day
+- The most recent snapshot in each day is kept
+- If multiple snapshots exist on the same day, only the latest is retained
+
+**Use case:** Standard daily backups with 1 week of history.
+
+### Keep weekly snapshots
+
+```json
+{
+  "keepWeekly": 4
+}
+```
+
+Keeps one snapshot per week for the last 4 weeks.
+
+**How it works:**
+- Snapshots are grouped by ISO week number
+- The most recent snapshot in each week is kept
+- Weeks start on Monday (ISO 8601 standard)
+
+**Use case:** Medium-term retention for data that changes weekly.
+
+### Keep monthly snapshots
+
+```json
+{
+  "keepMonthly": 12
+}
+```
+
+Keeps one snapshot per month for the last 12 months (1 year).
+
+**How it works:**
+- Snapshots are grouped by calendar month
+- The most recent snapshot in each month is kept
+
+**Use case:** Long-term retention for compliance and archival.
+
+### Keep yearly snapshots
+
+```json
+{
+  "keepYearly": 5
+}
+```
+
+Keeps one snapshot per year for the last 5 years.
+
+**How it works:**
+- Snapshots are grouped by calendar year
+- The most recent snapshot in each year is kept
+
+**Use case:** Very long-term archival (legal compliance, historical records).
+
+### Keep within duration
+
+```json
+{
+  "keepWithinDuration": "30d"
+}
+```
+
+Keeps ALL snapshots created within the specified duration, regardless of category.
+
+**Supported units:**
+- `h` - Hours (e.g., `72h` = 3 days)
+- `d` - Days (e.g., `30d` = 30 days)
+- `w` - Weeks (e.g., `4w` = 4 weeks)
+- `m` - Months (e.g., `6m` = 6 months)
+- `y` - Years (e.g., `1y` = 1 year)
+
+**Use case:** Ensure recent snapshots are always available, regardless of backup frequency.
+
+## Combining retention rules
+
+Retention rules can be combined to create sophisticated policies. Snapshots are kept if they match ANY rule.
+
+### Example: Grandfather-Father-Son (GFS)
+
+A common enterprise backup strategy:
+
+```json
+{
+  "keepDaily": 7,
+  "keepWeekly": 4,
+  "keepMonthly": 12,
+  "keepYearly": 5
+}
+```
+
+This keeps:
+- **Sons (daily):** Last 7 days (7 snapshots)
+- **Fathers (weekly):** Last 4 weeks (4 snapshots)
+- **Grandfathers (monthly):** Last 12 months (12 snapshots)
+- **Archives (yearly):** Last 5 years (5 snapshots)
+
+**Total maximum:** 28 snapshots covering 5+ years of history.
+
+### Example: Aggressive short-term retention
+
+```json
+{
+  "keepWithinDuration": "7d",
+  "keepWeekly": 4,
+  "keepMonthly": 6
+}
+```
+
+This keeps:
+- ALL snapshots from the last 7 days
+- One snapshot per week for the last 4 weeks
+- One snapshot per month for the last 6 months
+
+**Use case:** Development environments where recent history is critical, but long-term retention is not required.
+
+### Example: Minimal retention
+
+```json
+{
+  "keepLast": 3
+}
+```
+
+Keeps only the 3 most recent snapshots.
+
+**Use case:** Testing, non-critical data, or extremely storage-constrained environments.
+
+## How retention works in Zerobyte
+
+### Automatic application
+
+Retention policies are applied automatically after successful backups:
+
+```typescript
+// From backups.execution.ts
+if (ctx.schedule.retentionPolicy) {
+  void runForget(scheduleId).catch((error) => {
+    logger.error(`Failed to run retention policy for schedule ${scheduleId}: ${toMessage(error)}`);
+  });
+}
+```
+
+The `runForget()` function:
+1. Acquires an exclusive lock on the repository (blocks other operations)
+2. Runs `restic forget` with the configured policy and schedule tag
+3. Clears the repository cache to reflect removed snapshots
+4. Releases the lock
+
+### Tag-based isolation
+
+Retention policies ONLY affect snapshots tagged with the backup schedule's `shortId`:
+
+```bash
+restic forget --tag abc123 \
+  --keep-daily 7 \
+  --keep-weekly 4 \
+  --keep-monthly 12
+```
+
+This ensures:
+- Multiple backup schedules to the same repository don't interfere
+- Manual snapshots (without tags) are never affected by automatic retention
+- Each schedule manages its own retention independently
+
+### Dry-run preview
+
+Before applying a retention policy, you can preview what would be deleted:
+
+```typescript
+const dryRunResults = await restic.forget(repository.config, retentionPolicy, {
+  tag: scheduleId,
+  organizationId,
+  dryRun: true,
+});
+```
+
+Dry-run results show:
+- Which snapshots would be kept
+- Which snapshots would be removed
+- Snapshots grouped by retention category (hourly, daily, weekly, etc.)
+
+This is used in the UI to visualize retention policy impact before saving.
+
+### Retention categories
+
+The `parseRetentionCategories()` utility function processes dry-run output to group snapshots:
+
+```typescript
+type RetentionCategory = "keep" | "remove" | "hourly" | "daily" | "weekly" | "monthly" | "yearly";
+
+Map<string, RetentionCategory[]> {
+  "snapshot-id-1": ["daily", "weekly", "keep"],
+  "snapshot-id-2": ["monthly", "keep"],
+  "snapshot-id-3": ["remove"],
+}
+```
+
+Snapshots can belong to multiple categories (e.g., the most recent snapshot might be both daily AND weekly).
+
+## Mirror repository retention
+
+When mirror repositories are configured, retention policies can be applied to mirrors independently:
+
+```typescript
+// After copying to mirror
+if (retentionPolicy) {
+  await runForget(scheduleId, mirror.repository.id);
+}
+```
+
+This allows:
+- **Different retention on mirrors** - Keep more snapshots on cheap cold storage, fewer on expensive hot storage
+- **Independent maintenance** - Mirrors can be pruned without affecting the primary repository
+
+<Tip>
+Consider keeping longer retention on mirror repositories stored in low-cost archival storage (e.g., S3 Glacier).
+</Tip>
+
+## Storage reclamation (prune)
+
+The `forget` operation marks snapshots for deletion but doesn't immediately reclaim storage. To actually free space:
+
+1. Run the **doctor** operation (includes `restic prune`)
+2. Prune reads all pack files, removes unreferenced data, and repacks
+3. Storage space is returned to the filesystem/cloud provider
+
+<Warning>
+Prune operations can take hours for large repositories and require reading all pack files. Schedule prune during maintenance windows.
+</Warning>
+
+### When to prune
+
+- **After major deletions** - Removed many old snapshots and want to reclaim storage
+- **Monthly maintenance** - Regular prune keeps repositories healthy
+- **Before migration** - Prune before copying repositories to new backends
+
+### Prune performance
+
+Prune performance depends on:
+- **Repository size** - Larger repositories take longer
+- **Backend speed** - Cloud storage slower than local disks
+- **Network bandwidth** - Prune reads all pack files
+- **Deduplication ratio** - High deduplication means more processing
+
+For repositories over 1TB, prune can take 6-12 hours.
+
+## Retention policy validation
+
+Zerobyte validates retention policies before saving:
+
+```typescript
+const retentionPolicy = {
+  keepLast: 5,
+  keepDaily: 7,
+  keepWeekly: 4,
+  keepMonthly: 12,
+  keepYearly: 5,
+  keepWithinDuration: "30d",
+};
+```
+
+All fields are optional. An empty retention policy (`null` or `{}`) means snapshots are never automatically deleted.
+
+<Warning>
+Without a retention policy, repositories will grow indefinitely. Always configure retention for production backups.
+</Warning>
+
+## Common retention strategies
+
+### Production databases
+
+```json
+{
+  "keepHourly": 24,
+  "keepDaily": 7,
+  "keepWeekly": 4,
+  "keepMonthly": 12
+}
+```
+
+- Hourly recovery for last 24 hours (for quick rollbacks)
+- Daily recovery for last week
+- Weekly recovery for last month
+- Monthly recovery for last year
+
+### File servers
+
+```json
+{
+  "keepDaily": 7,
+  "keepWeekly": 8,
+  "keepMonthly": 24,
+  "keepYearly": 5
+}
+```
+
+- Daily for last week
+- Weekly for last 2 months
+- Monthly for last 2 years
+- Yearly for 5 years (compliance)
+
+### Development/staging
+
+```json
+{
+  "keepLast": 10,
+  "keepDaily": 7
+}
+```
+
+- Keep last 10 backups (regardless of schedule)
+- Plus one per day for the last week
+
+### Compliance (7-year retention)
+
+```json
+{
+  "keepDaily": 30,
+  "keepMonthly": 12,
+  "keepYearly": 7
+}
+```
+
+- Daily for last month
+- Monthly for last year
+- Yearly for 7 years
+
+### Minimal (testing only)
+
+```json
+{
+  "keepLast": 3
+}
+```
+
+- Keep only the 3 most recent snapshots
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Always configure retention policies">
+    Even a minimal policy (`keepLast: 10`) is better than none. Unbounded growth leads to:
+    - Runaway storage costs
+    - Slow repository operations
+    - Difficult recovery (too many snapshots to choose from)
+  </Accordion>
+
+  <Accordion title="Match retention to backup frequency">
+    If you back up hourly, configure `keepHourly`. If you back up daily, start with `keepDaily`.
+    
+    Mismatched frequency and retention (e.g., hourly backups with only `keepDaily: 7`) results in only 7 snapshots being kept despite 168 backups per week.
+  </Accordion>
+
+  <Accordion title="Use GFS for production data">
+    The Grandfather-Father-Son strategy (`keepDaily`, `keepWeekly`, `keepMonthly`, `keepYearly`) is battle-tested and balances recoverability with storage efficiency.
+  </Accordion>
+
+  <Accordion title="Consider compliance requirements">
+    Some industries require data retention for specific periods:
+    - **Healthcare (HIPAA):** 6-7 years
+    - **Financial (SOX):** 7 years
+    - **GDPR:** Varies by data type (right to erasure vs. retention requirements)
+    
+    Configure `keepYearly` to meet these requirements.
+  </Accordion>
+
+  <Accordion title="Monitor storage growth">
+    Even with retention policies, repositories grow over time:
+    - New files added to backups
+    - Existing files modified (deduplication only helps with unchanged blocks)
+    
+    Set up alerts for unexpected repository size increases.
+  </Accordion>
+
+  <Accordion title="Test retention policies with dry-run">
+    Before applying a new retention policy, use dry-run mode to preview what would be deleted. Ensure you're not accidentally removing critical snapshots.
+  </Accordion>
+
+  <Accordion title="Keep longer retention on mirrors">
+    Mirror repositories stored on cheap archival storage (S3 Glacier, Azure Archive) can have more aggressive retention:
+    
+    - **Primary (S3 Standard):** `keepDaily: 7, keepWeekly: 4`
+    - **Mirror (S3 Glacier):** `keepMonthly: 12, keepYearly: 5`
+  </Accordion>
+</AccordionGroup>
+
+## Database schema
+
+Retention policies are stored as JSON in `backup_schedules_table`:
+
+```typescript
+{
+  retentionPolicy: {
+    keepLast?: number;
+    keepHourly?: number;
+    keepDaily?: number;
+    keepWeekly?: number;
+    keepMonthly?: number;
+    keepYearly?: number;
+    keepWithinDuration?: string;
+  } | null
+}
+```
+
+If `retentionPolicy` is `null`, no automatic cleanup occurs.
+
+## Troubleshooting
+
+### Retention not removing old snapshots
+
+**Cause:** Snapshots may not have the correct tag.
+
+**Solution:** Check that snapshots were created with the backup schedule's tag:
+
+```bash
+restic snapshots --tag <schedule-short-id>
+```
+
+### Storage not reclaimed after forget
+
+**Cause:** `forget` only marks snapshots for deletion. Storage is reclaimed by `prune`.
+
+**Solution:** Run the doctor operation or manually run:
+
+```bash
+restic prune
+```
+
+### Retention keeping more snapshots than expected
+
+**Cause:** Snapshots matching multiple rules are all kept.
+
+**Solution:** Retention uses an OR model, not AND. If a snapshot matches any rule, it's kept. Review your policy to ensure rules don't overlap unintentionally.
+
+### "Repository is locked" during forget
+
+**Cause:** Another operation is using the repository.
+
+**Solution:** Wait for the operation to complete, or use the unlock operation if the lock is stale.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Backup schedules" icon="calendar-days" href="/concepts/backups">
+    Learn how backups create snapshots that retention policies manage
+  </Card>
+  <Card title="Creating repositories" icon="database" href="/guides/creating-repositories">
+    Set up repositories with compression and health monitoring
+  </Card>
+  <Card title="Restoring data" icon="rotate-left" href="/guides/restoring-data">
+    Browse, tag, and restore snapshots from your backups
+  </Card>
+  <Card title="Rclone integration" icon="cloud" href="/advanced/rclone-integration">
+    Use rclone for 40+ cloud storage backends
+  </Card>
+</CardGroup>

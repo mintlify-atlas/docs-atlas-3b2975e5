@@ -1,0 +1,563 @@
+---
+title: Docker Setup
+description: Configure Docker for Zerobyte with capabilities, devices, and volume mounts
+---
+
+Zerobyte runs as a Docker container and requires specific configuration depending on your use case. This page covers all Docker-specific setup requirements.
+
+## Basic Installation
+
+The standard Zerobyte setup requires Docker and Docker Compose.
+
+### Prerequisites
+
+- Docker Engine 20.10 or later
+- Docker Compose v2.0 or later
+
+### Standard Configuration
+
+This configuration supports all features including remote volume mounting:
+
+```yaml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    ports:
+      - "4096:4096"
+    environment:
+      - TZ=Europe/Paris
+      - BASE_URL=http://localhost:4096
+      - APP_SECRET=94bad46...c66e25d5c2b  # Generate with: openssl rand -hex 32
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+```
+
+**Start Zerobyte:**
+
+```bash
+docker compose up -d
+```
+
+**View logs:**
+
+```bash
+docker compose logs -f zerobyte
+```
+
+## Docker Capabilities
+
+### SYS_ADMIN Capability
+
+The `SYS_ADMIN` capability is required for mounting remote filesystems from within the container.
+
+```yaml
+cap_add:
+  - SYS_ADMIN
+```
+
+**What it enables:**
+
+- Mounting NFS shares
+- Mounting SMB/CIFS shares
+- Mounting WebDAV filesystems
+- Mounting SFTP via sshfs
+- Using FUSE-based filesystems
+
+**Security considerations:**
+
+- `SYS_ADMIN` is a powerful capability that grants container processes elevated privileges
+- Only required if you need to mount remote volumes from within Zerobyte
+- Can be removed if you only use local directories (see [Simplified Setup](#simplified-setup))
+
+## Device Mounts
+
+### /dev/fuse Device
+
+The FUSE (Filesystem in Userspace) device is required for mounting remote filesystems.
+
+```yaml
+devices:
+  - /dev/fuse:/dev/fuse
+```
+
+**What it enables:**
+
+- FUSE-based mounts (WebDAV, SFTP via sshfs)
+- Restic's mount command for browsing snapshots
+- Any other FUSE filesystem operations
+
+**When to include:**
+
+- ✅ Using remote volume backends (NFS, SMB, WebDAV, SFTP)
+- ✅ Want to browse/restore snapshots via FUSE mount
+- ❌ Only using local directories
+
+## Volume Mounts
+
+### Data Directory
+
+**Required** - Persistent storage for Zerobyte data.
+
+```yaml
+volumes:
+  - /var/lib/zerobyte:/var/lib/zerobyte
+```
+
+**What's stored here:**
+
+- SQLite database (`data/zerobyte.db`)
+- Restic password file (`data/restic.pass`)
+- Restic cache (`restic/cache/`)
+- Local repositories (`repositories/`)
+- Remote volume mount points (`volumes/`)
+- Application configuration
+
+<Warning>
+  **Never** point `/var/lib/zerobyte` to a network share. This will cause permission issues and severe performance degradation.
+</Warning>
+
+#### TrueNAS Users
+
+The `/var/lib` path is ephemeral on TrueNAS and will be reset during system upgrades.
+
+**Create a dedicated dataset:**
+
+```yaml
+volumes:
+  - /mnt/tank/docker/zerobyte:/var/lib/zerobyte
+```
+
+This ensures your configuration, encryption keys, and database persist across TrueNAS upgrades.
+
+### Timezone Sync
+
+**Recommended** - Synchronize container timezone with host.
+
+```yaml
+volumes:
+  - /etc/localtime:/etc/localtime:ro
+```
+
+Combine with the `TZ` environment variable for accurate scheduling:
+
+```yaml
+environment:
+  - TZ=Europe/Paris
+```
+
+### Local Directory Bind Mounts
+
+To backup local directories, mount them into the container:
+
+```yaml
+volumes:
+  - /var/lib/zerobyte:/var/lib/zerobyte
+  - /path/to/your/data:/mydata:ro  # Read-only recommended
+  - /path/to/photos:/photos:ro
+  - /path/to/documents:/documents:ro
+```
+
+**Best practices:**
+
+- Use read-only (`:ro`) mounts when possible to prevent accidental modifications
+- Use descriptive mount points (e.g., `/photos`, `/documents`)
+- Avoid mounting the entire host filesystem
+
+**In Zerobyte UI:**
+
+When adding a volume, select "Directory" type and enter the container path (e.g., `/mydata`).
+
+### Rclone Configuration
+
+To use rclone-based repositories, mount your rclone config:
+
+```yaml
+volumes:
+  - ~/.config/rclone:/root/.config/rclone:ro
+```
+
+**For non-root users:**
+
+```yaml
+environment:
+  - RCLONE_CONFIG_DIR=/home/appuser/.config/rclone
+volumes:
+  - ~/.config/rclone:/home/appuser/.config/rclone:ro
+```
+
+See the [rclone repository guide](#) for setup instructions.
+
+## Port Mapping
+
+### Default Port (4096)
+
+```yaml
+ports:
+  - "4096:4096"
+```
+
+This exposes Zerobyte on port 4096 on all host interfaces.
+
+### Bind to Localhost Only
+
+For improved security, bind only to localhost and use a reverse proxy or tunnel:
+
+```yaml
+ports:
+  - "127.0.0.1:4096:4096"
+```
+
+Then access via:
+
+- SSH tunnel
+- Reverse proxy (Nginx, Caddy, Traefik)
+- Cloudflare Tunnel
+- Tailscale
+
+### Custom Port
+
+To use a different host port:
+
+```yaml
+environment:
+  - PORT=4096  # Container port (usually keep default)
+ports:
+  - "8080:4096"  # Host:Container
+```
+
+Access at `http://localhost:8080`
+
+## Simplified Setup
+
+If you **only** need to backup locally mounted directories and don't require remote volume mounting, you can remove privileged capabilities:
+
+```yaml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    # No cap_add or devices needed
+    ports:
+      - "4096:4096"
+    environment:
+      - TZ=Europe/Paris
+      - BASE_URL=http://localhost:4096
+      - APP_SECRET=94bad46...c66e25d5c2b
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+      - /path/to/backup:/data:ro
+```
+
+### Trade-offs
+
+| Feature | Simplified | Standard |
+|---------|-----------|----------|
+| Security | ✅ Improved (no SYS_ADMIN) | ⚠️ Requires elevated privileges |
+| Local directories | ✅ Supported | ✅ Supported |
+| All repository types | ✅ S3, GCS, Azure, local, rclone | ✅ S3, GCS, Azure, local, rclone |
+| NFS volumes | ❌ Not available | ✅ Supported |
+| SMB volumes | ❌ Not available | ✅ Supported |
+| WebDAV volumes | ❌ Not available | ✅ Supported |
+| SFTP volumes | ❌ Not available | ✅ Supported |
+
+<Note>
+  Repository backends (where backups are stored) work in both modes. The limitation is only on source volume types.
+</Note>
+
+## Docker Secrets
+
+Zerobyte supports Docker Secrets for sensitive configuration:
+
+```yaml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    ports:
+      - "4096:4096"
+    environment:
+      - TZ=Europe/Paris
+      - BASE_URL=http://localhost:4096
+      - APP_SECRET=94bad46...c66e25d5c2b
+      # Reference secrets using env://
+      - ZEROBYTE_SMB_PASSWORD=${ZEROBYTE_SMB_PASSWORD:-}
+    secrets:
+      # Secrets accessible as file://secret_name
+      - smb_password
+      - s3_access_key
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+
+secrets:
+  smb_password:
+    file: ./secrets/smb-password.txt
+  s3_access_key:
+    file: ./secrets/s3-key.txt
+```
+
+**In Zerobyte UI:**
+
+- Use `env://ZEROBYTE_SMB_PASSWORD` for environment variable secrets
+- Use `file://smb_password` for Docker Secrets
+
+See [Environment Variables](/configuration/environment-variables#secret-references) for details.
+
+## Resource Limits
+
+Optionally limit container resource usage:
+
+```yaml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    # ... other config ...
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+```
+
+<Note>
+  Restic operations (especially backup and restore) can be CPU and memory intensive. Set limits based on your backup size and frequency.
+</Note>
+
+## Network Configuration
+
+### Bridge Network (Default)
+
+Zerobyte uses Docker's default bridge network:
+
+```yaml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    # Uses default bridge network
+```
+
+### Custom Network
+
+Create a custom network for better isolation:
+
+```yaml
+networks:
+  zerobyte:
+    driver: bridge
+
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    networks:
+      - zerobyte
+    # ... other config ...
+```
+
+### Host Network
+
+Use host networking if you need direct access to network filesystems:
+
+```yaml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    network_mode: host
+    # Note: ports section is ignored with host mode
+    environment:
+      - BASE_URL=http://localhost:4096
+```
+
+<Warning>
+  Host networking removes network isolation. Use only when necessary.
+</Warning>
+
+## Complete Examples
+
+### Standard Setup with Remote Volumes
+
+```yaml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    ports:
+      - "4096:4096"
+    environment:
+      - TZ=America/New_York
+      - BASE_URL=http://192.168.1.100:4096
+      - APP_SECRET=${APP_SECRET}  # From .env file
+      - LOG_LEVEL=info
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+      - ~/.config/rclone:/root/.config/rclone:ro
+```
+
+### Simplified Setup with Local Directories
+
+```yaml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4096:4096"  # Localhost only
+    environment:
+      - TZ=Europe/London
+      - BASE_URL=https://zerobyte.example.com
+      - APP_SECRET=${APP_SECRET}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+      - /mnt/photos:/photos:ro
+      - /mnt/documents:/documents:ro
+      - /mnt/videos:/videos:ro
+```
+
+### Production with Secrets and Resource Limits
+
+```yaml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    ports:
+      - "127.0.0.1:4096:4096"
+    environment:
+      - TZ=Asia/Tokyo
+      - BASE_URL=https://zerobyte.internal.example.com
+      - APP_SECRET=${APP_SECRET}
+      - LOG_LEVEL=warn
+      - TRUSTED_ORIGINS=https://admin.example.com
+    secrets:
+      - nas_password
+      - s3_secret_key
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /mnt/ssd/zerobyte:/var/lib/zerobyte
+      - ~/.config/rclone:/root/.config/rclone:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+secrets:
+  nas_password:
+    file: /secure/secrets/nas.txt
+  s3_secret_key:
+    file: /secure/secrets/s3.txt
+```
+
+## Upgrading
+
+### Pull Latest Image
+
+```bash
+docker compose pull
+```
+
+### Restart Container
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+### View Upgrade Logs
+
+```bash
+docker compose logs -f zerobyte
+```
+
+<Note>
+  Database migrations run automatically on startup. Your data is preserved in the `/var/lib/zerobyte` volume.
+</Note>
+
+## Troubleshooting
+
+### Container Fails to Start
+
+**Check logs:**
+
+```bash
+docker compose logs zerobyte
+```
+
+**Common issues:**
+
+- Missing `APP_SECRET` or `BASE_URL`
+- Invalid `APP_SECRET` length (must be 32-256 characters)
+- Port conflict (4096 already in use)
+- Volume permission issues
+
+### Permission Denied Errors
+
+Ensure the data directory has correct permissions:
+
+```bash
+sudo chown -R 1000:1000 /var/lib/zerobyte
+```
+
+### FUSE Mount Errors
+
+Verify the FUSE device is available:
+
+```bash
+ls -l /dev/fuse
+```
+
+Should show:
+
+```
+crw-rw-rw- 1 root root 10, 229 ... /dev/fuse
+```
+
+If missing, load the FUSE kernel module:
+
+```bash
+sudo modprobe fuse
+```
+
+### Remote Volumes Won't Mount
+
+1. Verify `SYS_ADMIN` capability is set
+2. Verify `/dev/fuse` is mounted
+3. Check container logs for mount errors
+4. Test mount manually inside container:
+
+```bash
+docker exec -it zerobyte bash
+mount.cifs //server/share /mnt/test -o user=myuser
+```

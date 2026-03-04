@@ -1,0 +1,186 @@
+---
+title: System
+description: System information, updates, and configuration
+---
+
+System endpoints provide information about Zerobyte capabilities, available updates, and system-wide configuration.
+
+## Get System Info
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/system/info \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Retrieve system information and available capabilities.
+
+**Response:**
+
+<ResponseField name="capabilities" type="object">
+  System capabilities
+  <Expandable>
+    <ResponseField name="rclone" type="boolean">
+      Whether rclone is available on the system
+    </ResponseField>
+    <ResponseField name="sysAdmin" type="boolean">
+      Whether Zerobyte has system admin capabilities (CAP_SYS_ADMIN for mounting)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Check for Updates
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/system/updates \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Check for available Zerobyte updates from GitHub releases.
+
+**Response:**
+
+<ResponseField name="currentVersion" type="string">
+  Current installed version
+</ResponseField>
+
+<ResponseField name="latestVersion" type="string">
+  Latest available version
+</ResponseField>
+
+<ResponseField name="hasUpdate" type="boolean">
+  Whether an update is available
+</ResponseField>
+
+<ResponseField name="missedReleases" type="array">
+  Releases between current and latest
+  <Expandable>
+    <ResponseField name="version" type="string">
+      Release version
+    </ResponseField>
+    <ResponseField name="url" type="string">
+      GitHub release URL
+    </ResponseField>
+    <ResponseField name="publishedAt" type="string">
+      ISO 8601 publish timestamp
+    </ResponseField>
+    <ResponseField name="body" type="string">
+      Release notes (Markdown)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Get Registration Status
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/system/registration-status \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Check if new user registration is enabled.
+
+**Response:**
+
+<ResponseField name="enabled" type="boolean">
+  Whether registration is enabled
+</ResponseField>
+
+## Set Registration Status
+
+<CodeGroup>
+```bash cURL
+curl -X PUT http://localhost:4096/api/v1/system/registration-status \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": false
+  }'
+```
+</CodeGroup>
+
+Enable or disable new user registration. Requires global admin role.
+
+**Request Body:**
+
+<ParamField body="enabled" type="boolean" required>
+  Whether to enable registration
+</ParamField>
+
+**Response:**
+
+<ResponseField name="enabled" type="boolean">
+  Updated registration status
+</ResponseField>
+
+## Download Restic Password
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/system/restic-password \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "password": "your-account-password"
+  }' \
+  -o restic.pass
+```
+</CodeGroup>
+
+Download the organization's Restic repository password for manual backup recovery. Requires organization admin role and password re-authentication.
+
+**Important:** This password is used to encrypt all repositories. Store it securely for disaster recovery.
+
+**Request Body:**
+
+<ParamField body="password" type="string" required>
+  Your account password for verification
+</ParamField>
+
+**Response:**
+
+- **Success (200):** Plain text file containing the Restic password
+- **Error (401):** Invalid password
+- **Error (404):** Restic password not found for organization
+- **Error (500):** Failed to retrieve password
+
+The response includes a `Content-Disposition` header with filename `restic.pass`.
+
+## Get Dev Panel Status
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/system/dev-panel \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Check if the developer panel is enabled.
+
+**Response:**
+
+<ResponseField name="enabled" type="boolean">
+  Whether dev panel is enabled
+</ResponseField>
+
+**Note:** The dev panel allows executing arbitrary Restic commands and should only be enabled in development environments. It can be activated with `Meta+Shift+D` when enabled.
+
+## Health Check
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/healthcheck
+```
+</CodeGroup>
+
+Basic health check endpoint (does not require authentication).
+
+**Response:**
+
+<ResponseField name="status" type="string">
+  Always returns "ok"
+</ResponseField>

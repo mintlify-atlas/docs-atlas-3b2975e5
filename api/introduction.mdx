@@ -1,0 +1,127 @@
+---
+title: Introduction
+description: Getting started with the Zerobyte API
+---
+
+The Zerobyte API provides programmatic access to manage backup automation built on Restic. You can manage volumes, repositories, backup schedules, snapshots, and notifications through a RESTful API.
+
+## Base URL
+
+The API is accessible at:
+
+```
+http://{serverIp}:4096/api/v1
+```
+
+By default, Zerobyte runs on port `4096`. The server IP is configured during installation.
+
+## Authentication
+
+Zerobyte uses session-based authentication powered by [better-auth](https://www.better-auth.com/). All API endpoints (except `/api/v1/auth/status` and `/api/v1/auth/sso-providers`) require authentication.
+
+Authentication flow:
+
+1. **Login** via `/api/auth/sign-in/email` to obtain a session cookie
+2. **Include session cookie** in subsequent API requests
+3. **2FA verification** (if enabled for the user) via `/api/auth/two-factor/verify`
+
+Session cookies are prefixed with `zerobyte` and are automatically managed by the authentication system.
+
+See the [Authentication](/api/authentication) page for detailed authentication endpoints.
+
+## Rate Limiting
+
+Rate limiting is enabled by default in production environments:
+
+- **Window**: 5 minutes
+- **Limit**: 1000 requests per window
+- **Key**: Based on `x-forwarded-for` header or client IP
+- **Bypass**: Rate limiting is disabled in development mode
+
+Rate limiting can be disabled via the `DISABLE_RATE_LIMITING` environment variable.
+
+## Request/Response Format
+
+All API requests and responses use JSON format.
+
+**Request Headers:**
+```
+Content-Type: application/json
+```
+
+**Response Format:**
+```json
+{
+  "data": { ... },
+  "error": "Error message if applicable"
+}
+```
+
+## Error Handling
+
+The API uses standard HTTP status codes:
+
+| Status Code | Description |
+|------------|-------------|
+| `200` | Success |
+| `201` | Created |
+| `400` | Bad Request - Invalid parameters |
+| `401` | Unauthorized - Authentication required |
+| `403` | Forbidden - Insufficient permissions |
+| `404` | Not Found |
+| `409` | Conflict - Resource already exists or operation not allowed |
+| `413` | Payload Too Large - Request body exceeds 10MB limit |
+| `500` | Internal Server Error |
+
+**Error Response:**
+```json
+{
+  "message": "Detailed error message"
+}
+```
+
+## Request Body Limits
+
+The maximum request body size is **10MB**. Requests exceeding this limit will receive a `413` status code.
+
+## Pagination
+
+Endpoints that return lists (such as volume files or snapshot files) support pagination:
+
+<ParamField query="offset" type="integer" default="0">
+  Number of items to skip
+</ParamField>
+
+<ParamField query="limit" type="integer" default="500">
+  Maximum number of items to return (max: 1000)
+</ParamField>
+
+**Response includes:**
+- `offset`: Current offset
+- `limit`: Current limit
+- `total`: Total number of items
+- `hasMore`: Boolean indicating if more items are available
+
+## OpenAPI Specification
+
+The OpenAPI specification is available at:
+
+```
+GET /api/v1/openapi.json
+```
+
+Interactive API documentation (Scalar) is available at:
+
+```
+GET /api/v1/docs
+```
+
+**Note:** The `/api/v1/docs` endpoint requires authentication.
+
+## SDKs and Libraries
+
+Zerobyte automatically generates TypeScript API clients. See the repository for client generation:
+
+```bash
+bun run gen:api-client
+```

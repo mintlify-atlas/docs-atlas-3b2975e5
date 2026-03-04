@@ -1,0 +1,512 @@
+---
+title: CLI Commands
+description: Command-line interface for user management, authentication, and system administration
+---
+
+Zerobyte includes a command-line interface (CLI) for administrative tasks that cannot or should not be performed through the web UI, such as password resets, 2FA management, and user account modifications.
+
+## Running CLI Commands
+
+All CLI commands are run inside the Zerobyte container using `docker exec`:
+
+```bash
+docker exec zerobyte zerobyte <command> [options]
+```
+
+<Note>
+Replace `zerobyte` with your actual container name if different.
+</Note>
+
+### Interactive vs Non-Interactive Mode
+
+Commands can run in two modes:
+
+- **Interactive mode** - Prompts for required information if not provided via flags
+- **Non-interactive mode** - All parameters provided via command-line flags (useful for scripts)
+
+## Available Commands
+
+### reset-password
+
+Reset a user's password and invalidate all active sessions.
+
+**Usage:**
+
+```bash
+docker exec zerobyte zerobyte reset-password [options]
+```
+
+**Options:**
+
+- `-u, --username <username>` - Username of the account to reset
+- `-p, --password <password>` - New password (must be 8+ characters)
+
+**Interactive Example:**
+
+```bash
+$ docker exec -it zerobyte zerobyte reset-password
+
+🔐 Zerobyte Password Reset
+
+? Select user to reset password for: admin
+? Enter new password: ********
+? Confirm new password: ********
+
+✅ Password for user "admin" has been reset successfully.
+   All existing sessions have been invalidated.
+```
+
+**Non-Interactive Example:**
+
+```bash
+docker exec zerobyte zerobyte reset-password \
+  --username admin \
+  --password "new-secure-password"
+```
+
+**Validation:**
+
+- Password must be at least 8 characters long
+- Passwords must match during confirmation (interactive mode)
+- All existing sessions are invalidated after reset
+
+---
+
+### disable-2fa
+
+Disable two-factor authentication for a user who has lost access to their authenticator device.
+
+**Usage:**
+
+```bash
+docker exec zerobyte zerobyte disable-2fa [options]
+```
+
+**Options:**
+
+- `-u, --username <username>` - Username of the account
+
+**Interactive Example:**
+
+```bash
+$ docker exec -it zerobyte zerobyte disable-2fa
+
+🔐 Zerobyte 2FA Disable
+
+? Select user to disable 2FA for: admin
+
+✅ Two-factor authentication has been disabled for user "admin".
+   The user can re-enable 2FA from their account settings.
+```
+
+**Non-Interactive Example:**
+
+```bash
+docker exec zerobyte zerobyte disable-2fa --username admin
+```
+
+**Notes:**
+
+- Returns an error if the user doesn't have 2FA enabled
+- Users can re-enable 2FA through account settings after it's disabled
+
+---
+
+### rekey-2fa
+
+Re-encrypt 2FA secrets when rotating the `APP_SECRET` environment variable. This is critical after changing the application secret.
+
+**Usage:**
+
+```bash
+docker exec zerobyte zerobyte rekey-2fa [options]
+```
+
+**Options:**
+
+- `-s, --legacy-secret <secret>` - Previous better-auth base secret (old `restic.pass` content)
+- `-f, --legacy-secret-file <path>` - Path to file containing legacy secret (defaults to `RESTIC_PASS_FILE`)
+
+<Warning>
+Use either `--legacy-secret` or `--legacy-secret-file`, not both.
+</Warning>
+
+**Example: Using Legacy Secret File**
+
+```bash
+docker exec zerobyte zerobyte rekey-2fa \
+  --legacy-secret-file /var/lib/zerobyte/restic.pass.old
+```
+
+**Example: Using Legacy Secret String**
+
+```bash
+docker exec zerobyte zerobyte rekey-2fa \
+  --legacy-secret "old-secret-value"
+```
+
+**Output:**
+
+```bash
+🔐 Zerobyte 2FA Re-key
+
+✅ Re-keyed 3/3 two-factor records successfully.
+```
+
+**When to Use:**
+
+Run this command after changing the `APP_SECRET` environment variable to ensure existing 2FA configurations continue to work. The command decrypts all 2FA secrets using the old secret and re-encrypts them with the new one.
+
+**Error Handling:**
+
+If any records fail to re-key:
+
+```bash
+❌ Re-keyed 2/3 two-factor records.
+   - User abc-123: Decryption failed
+```
+
+---
+
+### change-username
+
+Change a user's username and invalidate their active sessions.
+
+**Usage:**
+
+```bash
+docker exec zerobyte zerobyte change-username [options]
+```
+
+**Options:**
+
+- `-u, --username <username>` - Current username
+- `-n, --new-username <new-username>` - New username
+
+**Interactive Example:**
+
+```bash
+$ docker exec -it zerobyte zerobyte change-username
+
+👤 Zerobyte Change Username
+
+? Select a user to change username for: admin
+? Enter the new username: administrator
+
+✅ Username for "admin" has been changed to "administrator" successfully.
+```
+
+**Non-Interactive Example:**
+
+```bash
+docker exec zerobyte zerobyte change-username \
+  --username admin \
+  --new-username administrator
+```
+
+**Username Requirements:**
+
+- 3-30 characters long
+- Lowercase letters, numbers, and underscores only
+- Must be unique (not already in use)
+- Automatically normalized to lowercase
+
+**Pattern:** `^[a-z0-9_]{3,30}$`
+
+---
+
+### change-email
+
+Change a user's email address and remove linked SSO accounts. Requires the user to have a credential account (password).
+
+**Usage:**
+
+```bash
+docker exec zerobyte zerobyte change-email [options]
+```
+
+**Options:**
+
+- `-u, --username <username>` - Username of the account
+- `-e, --email <email>` - New email address
+
+**Interactive Example:**
+
+```bash
+$ docker exec -it zerobyte zerobyte change-email
+
+📧 Zerobyte Change Email
+
+? Select user to change email for: admin (admin@example.com)
+? Enter the new email: admin@newdomain.com
+
+⚠️  Disclaimer: changing this email will delete the following linked SSO account(s):
+   - google (admin@example.com)
+   The user will need to be invited again using the new email to regain access with those SSO providers.
+
+? Continue and delete 1 SSO account(s) for "admin"? Yes
+
+✅ Email for "admin" changed from "admin@example.com" to "admin@newdomain.com".
+   Deleted 1 linked SSO account(s).
+   All existing sessions have been invalidated.
+```
+
+**Non-Interactive Example:**
+
+```bash
+docker exec zerobyte zerobyte change-email \
+  --username admin \
+  --email admin@newdomain.com
+```
+
+**Important Considerations:**
+
+- Email addresses are automatically normalized to lowercase
+- Changing email deletes **all linked SSO accounts** (Google, GitHub, etc.)
+- User must have a credential account (password) before changing email
+- All existing sessions are invalidated
+- User needs to be re-invited with new email to link SSO providers again
+
+**Prerequisites:**
+
+- User must have a password set (credential account)
+- If not, run `reset-password` first
+
+---
+
+### assign-organization
+
+Move a user from one organization to another. This changes their organization membership and invalidates active sessions.
+
+**Usage:**
+
+```bash
+docker exec zerobyte zerobyte assign-organization [options]
+```
+
+**Options:**
+
+- `-u, --username <username>` - Username to assign
+- `-o, --organization <slug>` - Organization slug to assign user to
+
+**Interactive Example:**
+
+```bash
+$ docker exec -it zerobyte zerobyte assign-organization
+
+🏢 Zerobyte Assign Organization
+
+? Select user to assign: john_doe
+? Select organization to assign the user to: Engineering (engineering)
+
+✅ User "john_doe" has been assigned to organization "Engineering" successfully.
+   Previous organization: Marketing
+   All existing sessions have been invalidated.
+```
+
+**Non-Interactive Example:**
+
+```bash
+docker exec zerobyte zerobyte assign-organization \
+  --username john_doe \
+  --organization engineering
+```
+
+**Behavior:**
+
+- Creates a new membership if user has no existing organization
+- Updates existing membership if user is already in another organization
+- User retains their current role when moving between organizations
+- All active sessions are invalidated for security
+
+**Notes:**
+
+- Organization is identified by its **slug**, not name
+- User can only be a member of one organization at a time
+- See [Organizations](/advanced/organizations) for more details on multi-org features
+
+---
+
+## Common Workflows
+
+### Password Recovery
+
+When a user forgets their password:
+
+```bash
+# Reset password interactively
+docker exec -it zerobyte zerobyte reset-password
+
+# Or non-interactively
+docker exec zerobyte zerobyte reset-password \
+  --username admin \
+  --password "new-password"
+```
+
+### Lost 2FA Device
+
+When a user loses access to their authenticator app:
+
+```bash
+# Disable 2FA so they can log in
+docker exec zerobyte zerobyte disable-2fa --username admin
+
+# User can then re-enable 2FA from account settings
+```
+
+### Rotating Application Secret
+
+When changing the `APP_SECRET` environment variable:
+
+```bash
+# 1. Save old secret to a file
+echo "old-secret-value" > /tmp/old-secret.txt
+
+# 2. Update APP_SECRET in docker-compose.yml
+
+# 3. Restart Zerobyte
+docker compose down && docker compose up -d
+
+# 4. Re-key all 2FA secrets
+docker exec zerobyte zerobyte rekey-2fa \
+  --legacy-secret-file /tmp/old-secret.txt
+
+# 5. Clean up
+rm /tmp/old-secret.txt
+```
+
+### Renaming a User
+
+```bash
+# Change username from old to new
+docker exec zerobyte zerobyte change-username \
+  --username oldname \
+  --new-username newname
+```
+
+### Email Change with SSO
+
+When changing email for a user with SSO accounts:
+
+```bash
+# 1. Ensure user has a password set
+docker exec zerobyte zerobyte reset-password --username admin
+
+# 2. Change email (will delete SSO accounts)
+docker exec zerobyte zerobyte change-email \
+  --username admin \
+  --email newemail@example.com
+
+# 3. Re-invite user with new email to link SSO again
+```
+
+### Move User Between Organizations
+
+```bash
+# Assign user to different organization
+docker exec zerobyte zerobyte assign-organization \
+  --username john_doe \
+  --organization sales
+```
+
+## Scripting and Automation
+
+All commands support non-interactive mode for scripting:
+
+```bash
+#!/bin/bash
+# Automated user onboarding script
+
+USERNAME="newuser"
+PASSWORD="temporary-password"
+ORG="engineering"
+
+# Create user would be done through API, then:
+
+docker exec zerobyte zerobyte reset-password \
+  --username "$USERNAME" \
+  --password "$PASSWORD"
+
+docker exec zerobyte zerobyte assign-organization \
+  --username "$USERNAME" \
+  --organization "$ORG"
+
+echo "User $USERNAME onboarded to $ORG organization"
+```
+
+## Error Messages
+
+### User Not Found
+
+```bash
+❌ User "nonexistent" not found
+```
+
+**Solution:** Verify username is correct. Use interactive mode to see available users.
+
+### Password Too Short
+
+```bash
+❌ Password must be at least 8 characters long.
+```
+
+**Solution:** Use a password with 8 or more characters.
+
+### Invalid Username Format
+
+```bash
+❌ Invalid username "User-Name". Usernames must be 3-30 characters long 
+and can only contain lowercase letters, numbers, and underscores.
+```
+
+**Solution:** Use only lowercase letters, numbers, and underscores. 3-30 characters.
+
+### 2FA Not Enabled
+
+```bash
+❌ User "admin" does not have 2FA enabled
+```
+
+**Solution:** This is expected if trying to disable 2FA for a user without it.
+
+### Organization Not Found
+
+```bash
+❌ Organization "nonexistent" not found.
+```
+
+**Solution:** Use the organization **slug**, not the display name.
+
+## Security Considerations
+
+1. **Session Invalidation** - Most commands invalidate active sessions for security
+2. **Password in Commands** - Avoid using `--password` flag in shared terminal history; prefer interactive mode
+3. **Audit Logging** - All CLI operations are logged in application logs
+4. **Container Access** - Only users with Docker host access can run CLI commands
+5. **Credential Account Required** - Email changes require users to have password authentication
+
+## Help and Version
+
+View available commands:
+
+```bash
+docker exec zerobyte zerobyte --help
+```
+
+View command-specific help:
+
+```bash
+docker exec zerobyte zerobyte reset-password --help
+```
+
+Check Zerobyte CLI version:
+
+```bash
+docker exec zerobyte zerobyte --version
+```
+
+## Related Resources
+
+- [Organizations](/advanced/organizations)
+- [Troubleshooting](/advanced/troubleshooting)
+- [Rclone Integration](/advanced/rclone-integration)

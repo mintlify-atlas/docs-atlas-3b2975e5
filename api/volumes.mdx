@@ -1,0 +1,449 @@
+---
+title: Volumes
+description: Manage backup source volumes (NFS, SMB, WebDAV, SFTP, Local)
+---
+
+Volumes represent the data sources to back up. Zerobyte supports multiple backend types including NFS, SMB/CIFS, WebDAV, SFTP, and local directories.
+
+## List Volumes
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/volumes \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Retrieve all configured volumes.
+
+**Response:**
+
+<ResponseField name="volumes" type="array">
+  <Expandable>
+    <ResponseField name="id" type="number">
+      Volume database ID
+    </ResponseField>
+    <ResponseField name="shortId" type="string">
+      Short identifier for URLs
+    </ResponseField>
+    <ResponseField name="name" type="string">
+      Volume name
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Backend type: "nfs", "smb", "webdav", "sftp", or "local"
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Volume status: "mounted", "unmounted", "error"
+    </ResponseField>
+    <ResponseField name="lastError" type="string | null">
+      Last error message if any
+    </ResponseField>
+    <ResponseField name="autoRemount" type="boolean">
+      Whether to automatically remount on failure
+    </ResponseField>
+    <ResponseField name="createdAt" type="number">
+      Unix timestamp in milliseconds
+    </ResponseField>
+    <ResponseField name="updatedAt" type="number">
+      Unix timestamp in milliseconds
+    </ResponseField>
+    <ResponseField name="lastHealthCheck" type="number">
+      Unix timestamp of last health check
+    </ResponseField>
+    <ResponseField name="config" type="object">
+      Backend-specific configuration (varies by type)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Create Volume
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/volumes \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My NFS Share",
+    "config": {
+      "type": "nfs",
+      "host": "192.168.1.100",
+      "path": "/mnt/backups",
+      "version": "4"
+    }
+  }'
+```
+</CodeGroup>
+
+Create a new volume.
+
+**Request Body:**
+
+<ParamField body="name" type="string" required>
+  Volume name
+</ParamField>
+
+<ParamField body="config" type="object" required>
+  Backend configuration object (varies by type)
+  
+  **NFS:**
+  - `type`: "nfs"
+  - `host`: NFS server hostname or IP
+  - `path`: Remote path
+  - `version`: NFS version ("3" or "4")
+  - `options`: Additional mount options (optional)
+  
+  **SMB:**
+  - `type`: "smb"
+  - `host`: SMB server hostname or IP
+  - `share`: Share name
+  - `username`: Username
+  - `password`: Password
+  - `domain`: Domain (optional)
+  
+  **WebDAV:**
+  - `type`: "webdav"
+  - `url`: WebDAV URL
+  - `username`: Username
+  - `password`: Password
+  
+  **SFTP:**
+  - `type`: "sftp"
+  - `host`: SFTP server hostname or IP
+  - `port`: Port (default: 22)
+  - `username`: Username
+  - `password`: Password (or use `privateKey`)
+  - `privateKey`: Private key path (optional)
+  
+  **Local:**
+  - `type`: "local"
+  - `path`: Local filesystem path
+</ParamField>
+
+**Response:** Returns the created volume object (same structure as list response).
+
+## Get Volume
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/volumes/{shortId} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get details for a specific volume including filesystem statistics.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Volume short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="volume" type="object">
+  Volume object (same structure as list response)
+</ResponseField>
+
+<ResponseField name="statfs" type="object">
+  Filesystem statistics
+  <Expandable>
+    <ResponseField name="total" type="number">
+      Total space in bytes
+    </ResponseField>
+    <ResponseField name="used" type="number">
+      Used space in bytes
+    </ResponseField>
+    <ResponseField name="free" type="number">
+      Free space in bytes
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Update Volume
+
+<CodeGroup>
+```bash cURL
+curl -X PUT http://localhost:4096/api/v1/volumes/{shortId} \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Volume Name",
+    "autoRemount": true
+  }'
+```
+</CodeGroup>
+
+Update volume configuration.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Volume short ID
+</ParamField>
+
+**Request Body:**
+
+<ParamField body="name" type="string">
+  New volume name
+</ParamField>
+
+<ParamField body="autoRemount" type="boolean">
+  Enable/disable auto-remount on failure
+</ParamField>
+
+<ParamField body="config" type="object">
+  Updated backend configuration
+</ParamField>
+
+**Response:** Returns the updated volume object.
+
+## Delete Volume
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:4096/api/v1/volumes/{shortId} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Delete a volume. The volume will be unmounted first if necessary.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Volume short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+## Mount Volume
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/volumes/{shortId}/mount \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Mount a volume to make it accessible.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Volume short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="status" type="string">
+  Mount status: "mounted" or "error"
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  Error message if mount failed
+</ResponseField>
+
+## Unmount Volume
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/volumes/{shortId}/unmount \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Unmount a volume.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Volume short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="status" type="string">
+  Volume status after unmount
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  Error message if unmount failed
+</ResponseField>
+
+## Health Check
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/volumes/{shortId}/health-check \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Perform a health check on a volume.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Volume short ID
+</ParamField>
+
+**Response:**
+
+<ResponseField name="status" type="string">
+  Health status: "mounted", "unmounted", or "error"
+</ResponseField>
+
+<ResponseField name="error" type="string | null">
+  Error message if health check failed
+</ResponseField>
+
+## Test Connection
+
+<CodeGroup>
+```bash cURL
+curl -X POST http://localhost:4096/api/v1/volumes/test-connection \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "config": {
+      "type": "nfs",
+      "host": "192.168.1.100",
+      "path": "/mnt/backups",
+      "version": "4"
+    }
+  }'
+```
+</CodeGroup>
+
+Test a volume configuration before creating it.
+
+**Request Body:**
+
+<ParamField body="config" type="object" required>
+  Volume configuration to test (same format as create)
+</ParamField>
+
+**Response:**
+
+<ResponseField name="success" type="boolean">
+  Whether the connection test succeeded
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Test result message
+</ResponseField>
+
+## List Files
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:4096/api/v1/volumes/{shortId}/files?path=/data&offset=0&limit=500" \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+List files and directories in a volume path.
+
+**Parameters:**
+
+<ParamField path="shortId" type="string" required>
+  Volume short ID
+</ParamField>
+
+<ParamField query="path" type="string">
+  Directory path to list (default: root)
+</ParamField>
+
+<ParamField query="offset" type="integer" default="0">
+  Pagination offset
+</ParamField>
+
+<ParamField query="limit" type="integer" default="500">
+  Items per page (max: 1000)
+</ParamField>
+
+**Response:**
+
+<ResponseField name="files" type="array">
+  List of file entries
+  <Expandable>
+    <ResponseField name="name" type="string">
+      File or directory name
+    </ResponseField>
+    <ResponseField name="path" type="string">
+      Full path
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Entry type: "file" or "directory"
+    </ResponseField>
+    <ResponseField name="size" type="number | null">
+      File size in bytes (null for directories)
+    </ResponseField>
+    <ResponseField name="modifiedAt" type="number | null">
+      Last modified timestamp in milliseconds
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  Current directory path
+</ResponseField>
+
+<ResponseField name="offset" type="number">
+  Current offset
+</ResponseField>
+
+<ResponseField name="limit" type="number">
+  Current limit
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Total number of entries
+</ResponseField>
+
+<ResponseField name="hasMore" type="boolean">
+  Whether more entries are available
+</ResponseField>
+
+## Browse Filesystem
+
+<CodeGroup>
+```bash cURL
+curl -X GET "http://localhost:4096/api/v1/volumes/filesystem/browse?path=/mnt" \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Browse directories on the host filesystem (for configuring local volume paths).
+
+**Parameters:**
+
+<ParamField query="path" type="string" default="/">
+  Directory path to browse
+</ParamField>
+
+**Response:**
+
+<ResponseField name="directories" type="array">
+  List of directories
+  <Expandable>
+    <ResponseField name="name" type="string">
+      Directory name
+    </ResponseField>
+    <ResponseField name="path" type="string">
+      Full path
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Always "directory"
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  Current directory path
+</ResponseField>

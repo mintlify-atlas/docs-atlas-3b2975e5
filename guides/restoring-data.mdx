@@ -1,0 +1,507 @@
+---
+title: "Restoring Data"
+description: "Browse snapshots and restore files from your backups"
+---
+
+Restoring data is the most critical function of any backup system. Zerobyte provides multiple ways to access and restore your backed-up data from repository snapshots.
+
+## Understanding Snapshots
+
+Each backup creates a **snapshot** - a point-in-time copy of your data. Snapshots are:
+
+- **Immutable**: Cannot be modified after creation
+- **Deduplicated**: Only stores changed data
+- **Encrypted**: Protected with repository password
+- **Compressed**: Optimized for storage efficiency
+
+### Snapshot Information
+
+Each snapshot contains:
+- **Snapshot ID**: Unique identifier
+- **Timestamp**: When the backup was created
+- **Paths**: Directories that were backed up
+- **Size**: Amount of data in the snapshot
+- **Duration**: How long the backup took
+- **Tags**: Custom labels for organization
+- **Hostname**: Server that created the backup
+
+## Browsing Snapshots
+
+<Steps>
+  <Step title="Navigate to Repository">
+    Click **Repositories** in the sidebar and select a repository.
+  </Step>
+
+  <Step title="View Snapshots">
+    Click the **Snapshots** tab to see all available snapshots in chronological order.
+  </Step>
+
+  <Step title="Select a Snapshot">
+    Click on a snapshot to view its details and browse its contents.
+  </Step>
+
+  <Step title="Browse Files">
+    Navigate through directories just like a regular file browser. You can:
+    - View file and directory names
+    - See file sizes and modification times
+    - Navigate into subdirectories
+    - Search for specific files
+  </Step>
+</Steps>
+
+### Filtering Snapshots
+
+Filter snapshots by:
+- **Backup Schedule**: Show only snapshots from a specific backup job
+- **Tags**: Filter by custom tags
+- **Date Range**: Find snapshots within a time period
+- **Hostname**: Filter by the server that created them
+
+## Restoration Methods
+
+Zerobyte offers three ways to restore data:
+
+### 1. Download Individual Files
+
+Best for recovering a few specific files.
+
+<Steps>
+  <Step title="Browse to File">
+    Navigate through the snapshot to find the file you need.
+  </Step>
+
+  <Step title="Download">
+    Click the download icon next to the file to download it to your local computer.
+  </Step>
+</Steps>
+
+**Use cases:**
+- Recovering accidentally deleted files
+- Retrieving old versions of documents
+- Extracting individual configuration files
+
+### 2. Download Directory as Archive
+
+Download entire directories as compressed archives.
+
+<Steps>
+  <Step title="Navigate to Directory">
+    Browse to the directory you want to restore.
+  </Step>
+
+  <Step title="Download as TAR">
+    Click the download icon on a directory to download it as a `.tar` archive.
+  </Step>
+
+  <Step title="Extract Archive">
+    Extract the archive on your local system or target server.
+  </Step>
+</Steps>
+
+**Use cases:**
+- Restoring entire project directories
+- Recovering folder hierarchies
+- Migrating data to a new system
+
+### 3. Restore to Volume
+
+Restore snapshots directly back to the original volume or a different location.
+
+<Steps>
+  <Step title="Select Snapshot">
+    Navigate to the snapshot you want to restore from.
+  </Step>
+
+  <Step title="Click Restore">
+    Click the **Restore Snapshot** button.
+  </Step>
+
+  <Step title="Configure Restore Options">
+    - **Target Path**: Where to restore (defaults to original location)
+    - **Include Patterns**: Restore only specific files (optional)
+    - **Exclude Patterns**: Skip certain files during restore (optional)
+    - **Overwrite Mode**: How to handle existing files
+    - **Delete Extra Files**: Remove files not in the snapshot
+  </Step>
+
+  <Step title="Start Restore">
+    Click **Start Restore** to begin the restoration process.
+  </Step>
+
+  <Step title="Monitor Progress">
+    Watch the real-time progress indicator showing files restored and data transferred.
+  </Step>
+</Steps>
+
+**Use cases:**
+- Complete disaster recovery
+- Restoring entire servers
+- Rolling back to a previous state
+
+## Restore Configuration Options
+
+### Target Path
+
+Specify where to restore files:
+- **Original Location**: Restore to the same path as the backup
+- **Custom Path**: Restore to a different directory
+
+**Example:**
+```
+Original: /data/documents
+Custom Target: /data/documents-restored
+```
+
+<Tip>
+Restore to a different location first to review files before overwriting the original data.
+</Tip>
+
+### Include Patterns
+
+Restore only files matching specific patterns.
+
+**Examples:**
+```
+/documents/reports/**
+**/*.pdf
+/config.yaml
+```
+
+### Exclude Patterns
+
+Skip files during restore.
+
+**Examples:**
+```
+**/*.log
+**/*.tmp
+**/cache/**
+```
+
+### Overwrite Mode
+
+Controls how existing files are handled:
+
+- **Always**: Overwrite all existing files
+- **If Changed**: Only overwrite if content differs
+- **If Newer**: Only overwrite if snapshot version is newer
+- **Never**: Skip files that already exist
+
+**Comparison:**
+
+| Mode | Existing File | Snapshot File | Action |
+|------|--------------|---------------|--------|
+| Always | Any | Any | Overwrite |
+| If Changed | Same content | Any | Skip |
+| If Changed | Different | Any | Overwrite |
+| If Newer | Older | Newer | Overwrite |
+| If Newer | Newer | Older | Skip |
+| Never | Exists | Any | Skip |
+
+### Delete Extra Files
+
+Enable this option to remove files that exist in the target but not in the snapshot. This makes the target directory exactly match the snapshot.
+
+<Warning>
+**Dangerous**: This will permanently delete files. Only use when performing a complete restore to a known state.
+</Warning>
+
+## Restore Examples
+
+<AccordionGroup>
+  <Accordion title="Recover a Deleted File">
+    **Scenario**: User accidentally deleted an important document.
+    
+    **Steps:**
+    1. Find a snapshot from before the deletion
+    2. Browse to the file location
+    3. Download the file
+    4. Copy it back to the original location
+  </Accordion>
+
+  <Accordion title="Restore Specific File Types">
+    **Scenario**: Restore only database files from a backup.
+    
+    **Configuration:**
+    ```
+    Include Patterns:
+    **/*.sql
+    **/*.db
+    **/*.sqlite
+    
+    Target Path: /restored-databases
+    Overwrite Mode: Always
+    ```
+  </Accordion>
+
+  <Accordion title="Complete Disaster Recovery">
+    **Scenario**: Server failed, need to restore everything.
+    
+    **Steps:**
+    1. Set up new server with Zerobyte
+    2. Configure the same repository
+    3. Find the most recent snapshot
+    4. Restore to original paths
+    5. Set overwrite mode to "Always"
+    6. Enable "Delete Extra Files"
+    7. Execute restore
+  </Accordion>
+
+  <Accordion title="Restore Without Overwriting">
+    **Scenario**: Compare backup version with current files.
+    
+    **Configuration:**
+    ```
+    Target Path: /data-comparison
+    Overwrite Mode: Never
+    Delete Extra Files: Disabled
+    ```
+    
+    This restores files to a separate location for comparison.
+  </Accordion>
+
+  <Accordion title="Partial Directory Restore">
+    **Scenario**: Restore only documents, skip media files.
+    
+    **Configuration:**
+    ```
+    Include Patterns:
+    /documents/**
+    
+    Exclude Patterns:
+    **/*.mp4
+    **/*.mp3
+    **/*.jpg
+    
+    Overwrite Mode: If Changed
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Snapshot Management
+
+### Deleting Snapshots
+
+Manually remove specific snapshots:
+
+<Steps>
+  <Step title="Select Snapshots">
+    In the snapshots list, select one or more snapshots to delete.
+  </Step>
+
+  <Step title="Delete">
+    Click **Delete Selected** and confirm the action.
+  </Step>
+
+  <Step title="Prune Repository">
+    After deleting snapshots, space isn't immediately freed. The data is removed during the next retention cleanup or manual prune operation.
+  </Step>
+</Steps>
+
+<Warning>
+Deleted snapshots cannot be recovered. Always verify you're deleting the correct snapshots.
+</Warning>
+
+### Tagging Snapshots
+
+Organize snapshots with custom tags:
+
+<Steps>
+  <Step title="Select Snapshots">
+    Choose one or more snapshots to tag.
+  </Step>
+
+  <Step title="Tag Action">
+    Click **Tag Snapshots** and choose:
+    - **Add Tags**: Add new tags while keeping existing ones
+    - **Remove Tags**: Remove specific tags
+    - **Set Tags**: Replace all tags with a new set
+  </Step>
+
+  <Step title="Apply">
+    Enter tag names and confirm the operation.
+  </Step>
+</Steps>
+
+**Example tags:**
+```
+pre-upgrade
+tested
+production
+monthly-archive
+```
+
+### Refreshing Snapshots
+
+If snapshots were added outside of Zerobyte (e.g., via CLI), refresh the cache:
+
+1. Navigate to repository details
+2. Click **Refresh Snapshots**
+3. Zerobyte re-scans the repository for all snapshots
+
+## Advanced Restore Scenarios
+
+### Cross-Repository Restore
+
+Restore from one repository to a volume backed up to a different repository:
+
+1. Ensure both repositories use the same password
+2. Use mirror functionality or manually copy snapshots
+3. Restore from the mirrored snapshot
+
+### Point-in-Time Recovery
+
+Restore data to a specific moment:
+
+1. Identify the timestamp you want to restore to
+2. Find the snapshot created closest to (but before) that time
+3. Restore from that snapshot
+
+<Tip>
+Frequent backups (e.g., hourly) provide more granular point-in-time recovery options.
+</Tip>
+
+### Restore to Different System
+
+1. Set up Zerobyte on the target system
+2. Configure the same repository with the same password
+3. Browse and restore snapshots
+4. Adjust file paths as needed for the new system
+
+## Restoring from CLI
+
+For advanced users, you can restore directly using Restic:
+
+```bash
+# Access the container
+docker exec -it zerobyte sh
+
+# Set repository environment variables
+export RESTIC_REPOSITORY="/path/to/repo"
+export RESTIC_PASSWORD="your-repo-password"
+
+# List snapshots
+restic snapshots
+
+# Restore specific snapshot
+restic restore abc12345 --target /restore-location
+
+# Restore specific files
+restic restore abc12345 --target /restore-location --include /path/to/file
+```
+
+<Note>
+CLI restoration is useful for automation, scripting, or when the web interface is unavailable.
+</Note>
+
+## Verification and Testing
+
+### Regular Restore Tests
+
+Test your backups regularly to ensure they work when needed:
+
+<Steps>
+  <Step title="Schedule Monthly Tests">
+    Choose a random snapshot each month to test.
+  </Step>
+
+  <Step title="Restore to Test Location">
+    Restore to a separate directory to avoid affecting production data.
+  </Step>
+
+  <Step title="Verify Data Integrity">
+    - Check file contents
+    - Verify file permissions
+    - Confirm timestamps are correct
+    - Test application functionality with restored data
+  </Step>
+
+  <Step title="Document Results">
+    Keep records of successful restore tests for compliance and confidence.
+  </Step>
+</Steps>
+
+### Snapshot Integrity Check
+
+Use the repository **Check** function to verify backup integrity:
+
+1. Navigate to repository details
+2. Run **Doctor** operation
+3. Review check results for errors
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Cannot find snapshot">
+    - Verify you're looking in the correct repository
+    - Check date range filters
+    - Click **Refresh Snapshots** to update the cache
+    - Verify the backup actually completed successfully
+  </Accordion>
+
+  <Accordion title="Restore fails with permission errors">
+    - Ensure Zerobyte has write access to the target directory
+    - Check filesystem permissions on the destination
+    - For volume restores, verify the volume is mounted
+  </Accordion>
+
+  <Accordion title="Files are corrupted after restore">
+    - Run repository integrity check
+    - Try restoring from a different snapshot
+    - Check for storage issues in the repository backend
+    - Verify network stability during restore
+  </Accordion>
+
+  <Accordion title="Restore is very slow">
+    - Check network bandwidth to the repository
+    - Consider using download bandwidth limits
+    - Restore smaller subsets of files instead of entire snapshots
+    - For cloud repositories, check for throttling
+  </Accordion>
+
+  <Accordion title="Cannot decrypt snapshot">
+    - Verify repository password is correct
+    - For existing repositories, ensure you're using the original password
+    - Check for repository corruption (run Doctor)
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Test restores regularly">
+    Schedule monthly restore tests to verify backup integrity and ensure you know the restore process.
+  </Accordion>
+
+  <Accordion title="Document recovery procedures">
+    Write down step-by-step restore instructions specific to your environment for disaster scenarios.
+  </Accordion>
+
+  <Accordion title="Restore to staging first">
+    When possible, restore to a test environment to verify data before restoring to production.
+  </Accordion>
+
+  <Accordion title="Keep repository passwords secure">
+    Store repository passwords in a secure location separate from the backup system itself.
+  </Accordion>
+
+  <Accordion title="Monitor restore operations">
+    Stay connected during restores to handle any errors immediately.
+  </Accordion>
+
+  <Accordion title="Understand restore time objectives">
+    Know how long restores take for different data sizes to set appropriate recovery time expectations.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configure Notifications" icon="bell" href="/guides/notifications">
+    Set up alerts for backup success and failures
+  </Card>
+  
+  <Card title="Retention Policies" icon="calendar" href="/concepts/retention-policies">
+    Learn more about managing snapshot lifecycle
+  </Card>
+</CardGroup>

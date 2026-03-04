@@ -1,0 +1,499 @@
+---
+title: Troubleshooting
+description: Common issues, error messages, and solutions for Zerobyte backup problems
+---
+
+If you encounter any issues while using Zerobyte, this guide will help you diagnose and resolve common problems.
+
+<Warning>
+Before sharing logs publicly, **always remove sensitive information** such as passwords, access keys, repository URLs, and personal data.
+</Warning>
+
+## Enable Debug Logging
+
+Before troubleshooting, enable debug logging to get detailed diagnostic information:
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    environment:
+      - LOG_LEVEL=debug
+```
+
+Restart Zerobyte after making this change:
+
+```bash
+docker compose down && docker compose up -d
+```
+
+## Viewing Logs
+
+To view Zerobyte logs:
+
+```bash
+# Follow logs in real-time
+docker logs -f zerobyte
+
+# View last 100 lines
+docker logs --tail 100 zerobyte
+
+# Save logs to a file
+docker logs zerobyte > zerobyte.log 2>&1
+```
+
+<Note>
+Replace `zerobyte` with your actual container name if different.
+</Note>
+
+---
+
+## Common Issues
+
+### Permission Denied Errors When Mounting Remote Shares
+
+Mounting remote filesystems (SMB/CIFS, NFS) requires kernel-level privileges that containers may not have by default.
+
+**Symptoms:**
+- "Operation not permitted" errors
+- "Permission denied" when accessing mounted shares
+- Mount failures in container logs
+
+**Prerequisites:**
+- Remote share credentials are correct
+- Host kernel supports the target filesystem (e.g., CIFS module)
+- Docker is running in **rootful mode** (rootless Docker cannot perform kernel mounts)
+
+**Solution 1: Mount on Host (Recommended)**
+
+Mount the remote share **outside of Zerobyte** and bind mount the local path:
+
+```bash
+# On the Docker host
+sudo mount -t cifs //server/share /mnt/remote-share -o credentials=/path/to/creds
+```
+
+Then update `docker-compose.yml`:
+
+```yaml
+services:
+  zerobyte:
+    volumes:
+      - /mnt/remote-share:/data
+```
+
+Restart:
+
+```bash
+docker compose down && docker compose up -d
+```
+
+**Solution 2: Grant SYS_ADMIN Capability**
+
+Allow the container to perform mounts:
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    cap_add:
+      - SYS_ADMIN
+```
+
+<Warning>
+Granting `SYS_ADMIN` gives significant privileges to the container. Only use when necessary and understand the security implications.
+</Warning>
+
+---
+
+## Security Levels for Mounting Remote Shares
+
+Different environments require different security configurations.
+
+### AppArmor-Enabled Systems (Ubuntu/Debian)
+
+On Ubuntu/Debian, AppArmor may block mount operations even with `SYS_ADMIN`.
+
+**Check if AppArmor is active:**
+
+```bash
+# Check AppArmor status
+sudo aa-status
+
+# Check container's AppArmor profile
+docker inspect --format='{{.AppArmorProfile}}' zerobyte
+```
+
+If the output shows `docker-default`, AppArmor is active.
+
+**Solution:**
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+```
+
+### Seccomp-Restricted Environments
+
+Docker's default seccomp profile may block mount-related syscalls.
+
+**Solution:**
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+```
+
+### SELinux-Enabled Systems (CentOS/Fedora/RHEL)
+
+On Red Hat-based systems with SELinux, additional labels may be required.
+
+**Solution 1: Container Runtime Label**
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - label:type:container_runtime_t
+```
+
+**Solution 2: Disable SELinux for Container**
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - label:disable
+```
+
+### Privileged Mode (Last Resort)
+
+If all else fails, you can run in privileged mode. **Only use for troubleshooting.**
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    privileged: true
+```
+
+<Warning>
+Privileged mode disables most container isolation. Remove this after identifying the root cause and use a more targeted solution.
+</Warning>
+
+---
+
+## FUSE Mount Failures
+
+FUSE-based mounts (rclone mount, sshfs) require `/dev/fuse` access.
+
+**Symptoms:**
+- "failed to open /dev/fuse: Permission denied"
+- "fusermount3: failed to open /dev/fuse"
+- rclone volume mounts fail
+
+**Solution:**
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    devices:
+      - /dev/fuse:/dev/fuse
+    cap_add:
+      - SYS_ADMIN
+```
+
+**Verify FUSE Access:**
+
+```bash
+docker exec zerobyte ls -la /dev/fuse
+```
+
+Expected output:
+```
+crw-rw-rw- 1 root root 10, 229 Jan 1 12:00 /dev/fuse
+```
+
+---
+
+## Rclone Issues
+
+### Critical: Test on Host First
+
+<Warning>
+**Before reporting any rclone issue**, verify rclone works on your Docker host. Most rclone problems are due to misconfigured remotes, not Zerobyte bugs.
+</Warning>
+
+**Host Verification Checklist:**
+
+```bash
+# 1. List configured remotes
+rclone listremotes
+
+# 2. Test listing directories
+rclone lsd myremote:
+
+# 3. Test reading files
+rclone ls myremote:path/to/test
+
+# 4. For volume mounts: Test mounting
+mkdir -p /tmp/rclone-test
+rclone mount myremote:path /tmp/rclone-test --daemon --vfs-cache-mode writes
+ls /tmp/rclone-test
+fusermount -u /tmp/rclone-test
+```
+
+If these fail on your host, fix your rclone configuration before using Zerobyte.
+
+**Common Host Issues:**
+- Expired OAuth tokens (run `rclone config` to re-authenticate)
+- Incorrect credentials
+- Missing cloud provider permissions
+- Network/firewall blocking access
+
+### Pre-flight Checklist
+
+Before troubleshooting rclone in Zerobyte:
+
+- [ ] Rclone is installed on the Docker **host**
+- [ ] `rclone listremotes` shows your remote
+- [ ] `rclone lsd remote:` successfully lists directories
+- [ ] Rclone config directory is mounted into the container
+- [ ] Container has been restarted after mounting config
+
+### "No Remotes Available" in Dropdown
+
+**Cause:** Zerobyte cannot find your rclone configuration file.
+
+**Diagnosis:**
+
+```bash
+# Check if config is accessible
+docker exec zerobyte ls -la /root/.config/rclone/
+docker exec zerobyte cat /root/.config/rclone/rclone.conf
+```
+
+**Solution 1: Mount Rclone Config**
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    volumes:
+      - ~/.config/rclone:/root/.config/rclone:ro
+```
+
+Restart:
+
+```bash
+docker compose down && docker compose up -d
+```
+
+**Solution 2: Non-Root Containers**
+
+For containers running as non-root (e.g., TrueNAS):
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    environment:
+      - RCLONE_CONFIG_DIR=/home/appuser/.config/rclone
+    volumes:
+      - ~/.config/rclone:/home/appuser/.config/rclone:ro
+```
+
+### "Failed to Create File System" Error
+
+**Cause:** Authentication failure with the cloud provider.
+
+**Solution:**
+
+1. Re-authenticate on the host:
+
+```bash
+rclone config
+# Select your remote and reconnect
+```
+
+2. Verify authentication:
+
+```bash
+rclone lsd remote:
+```
+
+3. Restart Zerobyte:
+
+```bash
+docker compose restart
+```
+
+### EACCES Errors
+
+**Cause:** AppArmor or seccomp blocking rclone execution.
+
+**Solution:** Disable security profiles as described in:
+- [AppArmor-Enabled Systems](#apparmor-enabled-systems-ubuntudebian)
+- [Seccomp-Restricted Environments](#seccomp-restricted-environments)
+
+### Rclone SFTP Repository Authentication Failures
+
+When using SFTP remotes with SSH key authentication, the key file path in `rclone.conf` points to the **host** filesystem, not the container.
+
+**Problem:** `key_file = ~/.ssh/id_rsa` won't work inside the container.
+
+**Solution 1: Mount SSH Keys (Recommended)**
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    volumes:
+      - ~/.config/rclone:/root/.config/rclone:ro
+      - ~/.ssh:/root/.ssh:ro  # Required for SFTP key_file
+```
+
+**Solution 2: Embed Key in Config**
+
+Convert key to single-line format:
+
+```bash
+awk '{printf "%s\\n", $0}' < ~/.ssh/id_rsa
+```
+
+Update `~/.config/rclone/rclone.conf`:
+
+```ini
+[sftp-remote]
+type = sftp
+host = example.com
+user = backup
+key_pem = -----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5v...\n-----END OPENSSH PRIVATE KEY-----
+```
+
+**Solution 3: Use ssh-agent**
+
+```ini
+[sftp-remote]
+type = sftp
+host = example.com
+user = backup
+key_use_agent = true
+```
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    environment:
+      - SSH_AUTH_SOCK=/ssh-agent
+    volumes:
+      - ~/.config/rclone:/root/.config/rclone:ro
+      - ${SSH_AUTH_SOCK}:/ssh-agent
+```
+
+### Rclone Volume Mount Issues
+
+Using rclone as a **volume backend** requires additional prerequisites.
+
+**Prerequisites:**
+- Linux Docker host (not Windows/macOS)
+- `/dev/fuse` device access
+- `SYS_ADMIN` capability
+- FUSE support on host
+
+**Test FUSE on Host First:**
+
+```bash
+mkdir -p /tmp/test
+rclone mount remote:path /tmp/test --daemon
+ls /tmp/test
+fusermount -u /tmp/test
+```
+
+If this fails, FUSE isn't working on your host.
+
+**Configuration:**
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    volumes:
+      - ~/.config/rclone:/root/.config/rclone:ro
+```
+
+**Common Mount Errors:**
+
+**Error:** `mount helper error: fusermount3: failed to open /dev/fuse: Permission denied`
+
+**Solution:** Add `/dev/fuse` device mapping (see above).
+
+**Error:** `mount helper error: fusermount3: mount failed: Operation not permitted`
+
+**Solution:** Add `SYS_ADMIN` capability (see above).
+
+---
+
+## Collecting Diagnostic Information
+
+If you need to open a GitHub issue, gather this information:
+
+```bash
+# Host verification
+rclone version
+rclone listremotes
+rclone lsd remote: 2>&1
+
+# Container verification
+docker exec zerobyte ls -la /root/.config/rclone/
+docker exec zerobyte env | grep RCLONE
+docker logs zerobyte 2>&1 | tail -50
+
+# Container capabilities
+docker inspect zerobyte --format='{{.HostConfig.CapAdd}}'
+docker inspect zerobyte --format='{{.HostConfig.Devices}}'
+```
+
+**Redact sensitive information** before sharing:
+- Passwords and API keys
+- Access tokens
+- Repository URLs
+- Personal email addresses
+- Server hostnames and IP addresses
+
+---
+
+## Getting Help
+
+If you've followed this guide and still have issues:
+
+1. **Check existing issues**: [GitHub Issues](https://github.com/nicotsx/zerobyte/issues)
+2. **Search closed issues**: Your problem may already be solved
+3. **Open a new issue**: Include diagnostic information and logs (with secrets removed)
+
+**When opening an issue, include:**
+- Zerobyte version (`docker exec zerobyte zerobyte --version`)
+- Docker version (`docker --version`)
+- Host operating system
+- Relevant `docker-compose.yml` (redact secrets)
+- Error messages from logs
+- Steps to reproduce
+- What you've already tried
+
+---
+
+## Related Resources
+
+- [Rclone Integration](/advanced/rclone-integration) - Complete rclone setup guide
+- [CLI Commands](/advanced/cli-commands) - Administrative command-line tools
+- [Organizations](/advanced/organizations) - Multi-tenancy and team management
+- [GitHub Repository](https://github.com/nicotsx/zerobyte) - Source code and issue tracker

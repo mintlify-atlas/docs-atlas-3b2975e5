@@ -1,0 +1,411 @@
+---
+title: "Volumes"
+description: "Understand volume types, mounting, and how Zerobyte connects to your data sources"
+---
+
+## What are volumes?
+
+Volumes in Zerobyte represent the source locations you want to back up. A volume is a mounted filesystem that Zerobyte can read from to create backups. Think of volumes as the "what" in your backup strategy — the data sources that need protection.
+
+Each volume can be a local directory, network share, or remote filesystem. Zerobyte handles the mounting and health monitoring automatically, ensuring your data is accessible when backup jobs run.
+
+## Why volumes matter
+
+Volumes provide a standardized abstraction layer over different storage protocols. Instead of managing mount points manually, Zerobyte:
+
+- **Automatically mounts and unmounts** filesystems based on backup schedules
+- **Monitors health status** to detect connection issues before backups fail
+- **Encrypts sensitive credentials** like passwords and private keys at rest
+- **Provides file browsing** to help you configure inclusion and exclusion patterns
+- **Supports auto-remount** to recover from transient network failures
+
+By centralizing volume management, you can focus on backup policies rather than infrastructure details.
+
+## Volume lifecycle
+
+Every volume in Zerobyte follows this lifecycle:
+
+```
+Created → Mounted → Healthy → In Use by Backup → Unmounted (optional)
+            ↓
+          Error → Auto-remount (if enabled)
+```
+
+### Status states
+
+Volumes can be in one of three states:
+
+<Steps>
+  <Step title="Mounted">
+    The volume is successfully mounted and accessible at `/mnt/volumes/{shortId}`. Backup jobs can read from this volume.
+  </Step>
+  <Step title="Unmounted">
+    The volume exists in Zerobyte but is not currently mounted. Backups cannot run until the volume is mounted.
+  </Step>
+  <Step title="Error">
+    The mount operation failed or a health check detected the volume is no longer accessible. Check `lastError` for details.
+  </Step>
+</Steps>
+
+### Auto-remount
+
+When `autoRemount` is enabled (default), Zerobyte automatically attempts to remount volumes that enter an error state. This is useful for:
+
+- Network shares that experience temporary connectivity issues
+- Remote filesystems that may disconnect during network maintenance
+- Recovering from server restarts without manual intervention
+
+## Supported volume types
+
+Zerobyte supports six volume backend types, each optimized for different use cases.
+
+### Directory (local)
+
+Mount a local directory on the host system. This is the simplest volume type and requires no network configuration.
+
+**Use cases:**
+- Backing up local application data
+- Testing backup configurations
+- Consolidating data from Docker volumes
+
+**Configuration:**
+```json
+{
+  "backend": "directory",
+  "path": "/path/to/local/directory",
+  "readOnly": false
+}
+```
+
+<Note>
+Directory volumes mount using bind mounts. Ensure the path exists and the Zerobyte process has read access.
+</Note>
+
+### NFS (Network File System)
+
+Mount network shares using NFS protocol. Zerobyte supports NFSv3, NFSv4, and NFSv4.1.
+
+**Use cases:**
+- Backing up NAS devices
+- Enterprise file servers
+- Shared storage in containerized environments
+
+**Configuration:**
+```json
+{
+  "backend": "nfs",
+  "server": "192.168.1.100",
+  "exportPath": "/volume1/data",
+  "version": "4",
+  "port": 2049,
+  "readOnly": false
+}
+```
+
+**NFS versions:**
+- `3` - NFSv3 (maximum compatibility)
+- `4` - NFSv4 (better security, stateful)
+- `4.1` - NFSv4.1 (improved performance, pNFS support)
+
+<Warning>
+NFS volumes require the `SYS_ADMIN` capability in Docker. Ensure your container has `cap_add: [SYS_ADMIN]` configured.
+</Warning>
+
+### SMB (Server Message Block)
+
+Mount Windows shares and Samba servers using the SMB/CIFS protocol.
+
+**Use cases:**
+- Windows file servers
+- Samba shares on Linux/NAS
+- Active Directory-integrated storage
+
+**Configuration:**
+```json
+{
+  "backend": "smb",
+  "server": "fileserver.example.com",
+  "share": "backups",
+  "username": "backup-user",
+  "password": "encrypted-password",
+  "domain": "CORP",
+  "vers": "3.0",
+  "port": 445,
+  "readOnly": false
+}
+```
+
+**SMB versions:**
+- `1.0` - Legacy (not recommended, security risks)
+- `2.0` - SMB2 (minimum recommended)
+- `2.1` - SMB2.1 (improved performance)
+- `3.0` - SMB3 (encryption support)
+- `auto` - Negotiate highest supported version
+
+<Tip>
+For guest access (no authentication), set `guest: true` and omit `username` and `password`.
+</Tip>
+
+### WebDAV
+
+Mount WebDAV servers over HTTP/HTTPS. Useful for backing up cloud storage that exposes WebDAV endpoints.
+
+**Use cases:**
+- Nextcloud/ownCloud instances
+- Web-based file storage
+- Cloud providers with WebDAV support
+
+**Configuration:**
+```json
+{
+  "backend": "webdav",
+  "server": "cloud.example.com",
+  "path": "/remote.php/dav/files/username",
+  "username": "backup-user",
+  "password": "encrypted-password",
+  "port": 443,
+  "ssl": true,
+  "readOnly": false
+}
+```
+
+<Note>
+WebDAV volumes mount using `davfs2`. For HTTPS endpoints, ensure SSL certificates are valid or configure appropriate trust settings.
+</Note>
+
+### SFTP (SSH File Transfer Protocol)
+
+Mount remote directories via SSH. Supports both password and SSH key authentication.
+
+**Use cases:**
+- Remote Linux servers
+- VPS data backups
+- SSH-accessible storage
+
+**Configuration (key-based):**
+```json
+{
+  "backend": "sftp",
+  "host": "server.example.com",
+  "port": 22,
+  "username": "backup",
+  "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\n...",
+  "path": "/data/to/backup",
+  "skipHostKeyCheck": true,
+  "readOnly": false
+}
+```
+
+**Configuration (password-based):**
+```json
+{
+  "backend": "sftp",
+  "host": "server.example.com",
+  "port": 22,
+  "username": "backup",
+  "password": "encrypted-password",
+  "path": "/data/to/backup",
+  "skipHostKeyCheck": false,
+  "knownHosts": "server.example.com ssh-ed25519 AAAA...",
+  "readOnly": false
+}
+```
+
+<Warning>
+For production use, set `skipHostKeyCheck: false` and provide the server's public key in `knownHosts` to prevent man-in-the-middle attacks.
+</Warning>
+
+### Rclone
+
+Mount any rclone-supported backend as a volume. This provides access to 40+ cloud storage providers.
+
+**Use cases:**
+- Backing up cloud storage to encrypted repositories
+- Consolidating data from multiple cloud providers
+- Accessing exotic storage backends
+
+**Configuration:**
+```json
+{
+  "backend": "rclone",
+  "remote": "myremote:path/to/data",
+  "path": "/",
+  "readOnly": false
+}
+```
+
+<Tip>
+The `remote` must be configured in rclone's config file. See [rclone integration](/advanced/rclone-integration) for setup instructions.
+</Tip>
+
+## How volumes work in Zerobyte
+
+Under the hood, Zerobyte manages volumes through a sophisticated backend system:
+
+### Mount point structure
+
+All volumes are mounted under `/mnt/volumes/{shortId}` where `{shortId}` is a unique identifier assigned when the volume is created.
+
+```
+/mnt/volumes/
+├── abc123/  (NFS volume)
+├── def456/  (SMB volume)
+└── ghi789/  (Directory volume)
+```
+
+This isolation ensures:
+- **No path conflicts** between volumes
+- **Clean unmounting** without affecting other volumes
+- **Consistent file browsing** APIs across all backend types
+
+### Backend implementation
+
+The `createVolumeBackend()` function in `app/server/modules/backends/backend.ts` instantiates the appropriate backend driver based on volume type:
+
+```typescript
+switch (volume.type) {
+  case "directory": return new DirectoryBackend(volume);
+  case "nfs": return new NfsBackend(volume);
+  case "smb": return new SmbBackend(volume);
+  case "webdav": return new WebdavBackend(volume);
+  case "sftp": return new SftpBackend(volume);
+  case "rclone": return new RcloneBackend(volume);
+}
+```
+
+Each backend implements:
+- `mount()` - Establish the connection and mount the filesystem
+- `unmount()` - Cleanly disconnect and unmount
+- `checkHealth()` - Verify the mount is still accessible
+
+### Security: Credential encryption
+
+Sensitive fields like passwords and private keys are encrypted before storage using the `cryptoUtils.sealSecret()` function:
+
+```typescript
+// From volume.service.ts
+switch (config.backend) {
+  case "smb":
+    return {
+      ...config,
+      password: config.password ? await cryptoUtils.sealSecret(config.password) : undefined,
+    };
+  case "sftp":
+    return {
+      ...config,
+      password: config.password ? await cryptoUtils.sealSecret(config.password) : undefined,
+      privateKey: config.privateKey ? await cryptoUtils.sealSecret(config.privateKey) : undefined,
+    };
+}
+```
+
+This ensures credentials are never stored in plaintext in the database.
+
+### Health checks
+
+Health checks run automatically and can be triggered manually. The `checkHealth()` operation:
+
+1. Attempts to stat the mount point using `getStatFs()`
+2. Verifies filesystem statistics are readable
+3. Updates `volume.status` and `volume.lastHealthCheck`
+4. Records any errors in `volume.lastError`
+
+Health checks include a 1-second timeout to prevent hanging operations from blocking the system.
+
+## File browsing
+
+Zerobyte provides APIs to browse mounted volume contents, making it easy to:
+- Verify the volume mounted correctly
+- Identify paths for inclusion/exclusion patterns
+- Estimate backup sizes
+
+The `listFiles()` service method supports:
+- **Pagination** with configurable offset and limit (max 500 items per page)
+- **Recursive directory traversal** by specifying subpaths
+- **File metadata** including size, type, and modification time
+- **Sorted output** with directories listed before files
+
+## Read-only volumes
+
+All volume types support a `readOnly` flag. When enabled:
+- Restic can still read and back up files
+- Write operations fail at the filesystem level
+- Provides an extra safety layer for production data
+
+<Tip>
+Enable read-only mode when backing up live databases or critical application data to prevent accidental modifications.
+</Tip>
+
+## Database schema
+
+Volumes are stored in the `volumes_table` with this structure:
+
+```typescript
+{
+  id: number,                    // Auto-increment primary key
+  shortId: string,               // Human-friendly unique identifier
+  name: string,                  // Display name
+  type: BackendType,             // "nfs" | "smb" | "directory" | etc.
+  status: BackendStatus,         // "mounted" | "unmounted" | "error"
+  config: BackendConfig,         // Type-specific configuration (encrypted)
+  lastError: string | null,      // Error message from last operation
+  lastHealthCheck: number,       // Timestamp in milliseconds
+  autoRemount: boolean,          // Auto-recovery enabled
+  organizationId: string,        // Multi-tenant isolation
+  createdAt: number,
+  updatedAt: number
+}
+```
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Name volumes descriptively">
+    Use names that indicate what data the volume contains:
+    - `production-database-dumps`
+    - `customer-uploads-nfs`
+    - `accounting-smb-share`
+    
+    Avoid generic names like `volume1` or `backup`.
+  </Accordion>
+
+  <Accordion title="Enable auto-remount for network volumes">
+    Network shares can experience transient failures. Auto-remount ensures backups resume automatically after connectivity is restored.
+  </Accordion>
+
+  <Accordion title="Use read-only mode when possible">
+    Protect source data from accidental modification by enabling read-only mounting. This is especially important for:
+    - Production database backups
+    - Archive data
+    - Compliance-critical files
+  </Accordion>
+
+  <Accordion title="Test connections before creating volumes">
+    Use the "Test Connection" feature in the UI (or the API endpoint) to verify credentials and connectivity before saving the volume configuration.
+  </Accordion>
+
+  <Accordion title="Monitor volume health">
+    Set up notifications for volume health check failures. A volume in error state will cause backup jobs to fail.
+  </Accordion>
+
+  <Accordion title="Minimize mount time">
+    For security and resource efficiency, unmount volumes when backups aren't running. This is handled automatically when volumes are only used by scheduled backups.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Create a repository" icon="database" href="/concepts/repositories">
+    Learn about backup repositories where your encrypted snapshots are stored
+  </Card>
+  <Card title="Set up backups" icon="calendar-days" href="/concepts/backups">
+    Configure backup schedules to protect your volumes
+  </Card>
+  <Card title="Volume management guide" icon="folder-open" href="/guides/adding-volumes">
+    Step-by-step instructions for adding and configuring volumes
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting">
+    Resolve common volume mounting issues
+  </Card>
+</CardGroup>

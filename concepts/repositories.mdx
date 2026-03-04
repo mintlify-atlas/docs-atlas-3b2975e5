@@ -1,0 +1,548 @@
+---
+title: "Repositories"
+description: "Learn about Restic repositories, storage backends, and how Zerobyte manages encrypted backup destinations"
+---
+
+## What are repositories?
+
+A repository in Zerobyte is an encrypted storage location where your backup snapshots are stored. Powered by Restic, repositories provide:
+
+- **End-to-end encryption** using AES-256 in counter mode with Poly1305-AES for authentication
+- **Deduplication** at the chunk level to minimize storage usage
+- **Compression** with configurable modes (off, auto, max)
+- **Immutable snapshots** that can't be modified once created
+- **Incremental backups** that only store changed data
+
+Each repository is self-contained and can be stored on local disks, cloud object storage, or any of 40+ backends supported through rclone.
+
+## Why repositories matter
+
+Repositories are the "where" in your backup strategy. They separate the backup destination from the source, providing:
+
+### Data sovereignty
+
+You control where your encrypted data is stored. Choose:
+- **On-premises** storage for data that can't leave your infrastructure
+- **Cloud storage** for offsite protection and disaster recovery
+- **Hybrid approaches** using repository mirrors
+
+### Encryption by default
+
+Every repository is encrypted with a password (stored per-organization in Zerobyte). Even if an attacker gains access to your S3 bucket or backup disk, they cannot read your data without the password.
+
+### Storage efficiency
+
+Restic's content-defined chunking and deduplication means:
+- Only changed blocks are stored in incremental backups
+- Identical files across different backups share storage
+- Moved or renamed files don't consume additional space
+
+### Bandwidth controls
+
+Zerobyte allows you to limit upload and download bandwidth per repository, preventing backups from saturating your network connection.
+
+## Repository lifecycle
+
+Repositories follow this lifecycle in Zerobyte:
+
+```
+Created → Initialized → Healthy → In Use → Maintained
+            ↓              ↓
+          Error        Needs Repair (Doctor)
+```
+
+### Status states
+
+<Steps>
+  <Step title="Unknown">
+    Initial state after creation, before the first health check runs.
+  </Step>
+  <Step title="Healthy">
+    Repository passed integrity checks and is ready for backup/restore operations.
+  </Step>
+  <Step title="Error">
+    Health check failed or repository is inaccessible. Check `lastError` for details.
+  </Step>
+  <Step title="Doctor">
+    Repository maintenance is running via the "doctor" operation (combination of check, repair, and prune).
+  </Step>
+</Steps>
+
+## Supported repository backends
+
+Zerobyte supports eight backend types, each optimized for different storage scenarios.
+
+### Local (filesystem)
+
+Store repositories on locally attached disks or mounted filesystems.
+
+**Use cases:**
+- Fast local backups to NAS devices
+- USB-attached backup drives
+- High-speed recovery scenarios
+
+**Configuration:**
+```json
+{
+  "backend": "local",
+  "path": "/mnt/backup-disk/repositories",
+  "isExistingRepository": false
+}
+```
+
+<Note>
+For new repositories, Zerobyte automatically appends the repository's `shortId` to the path to ensure isolation.
+</Note>
+
+### Amazon S3 (and S3-compatible)
+
+Store backups on Amazon S3 or S3-compatible services (MinIO, Wasabi, Backblaze B2, etc.).
+
+**Use cases:**
+- Cloud-native backup storage
+- Long-term archival with lifecycle policies
+- Globally distributed backup targets
+
+**Configuration:**
+```json
+{
+  "backend": "s3",
+  "endpoint": "s3.amazonaws.com",
+  "bucket": "my-backup-bucket",
+  "accessKeyId": "AKIAIOSFODNN7EXAMPLE",
+  "secretAccessKey": "encrypted-secret-key",
+  "isExistingRepository": false
+}
+```
+
+**S3-compatible providers:**
+- **AWS S3** - `s3.amazonaws.com` or regional endpoints
+- **MinIO** - `https://minio.example.com`
+- **Wasabi** - `s3.wasabisys.com`
+- **Backblaze B2** - `s3.us-west-000.backblazeb2.com`
+- **DigitalOcean Spaces** - `nyc3.digitaloceanspaces.com`
+
+<Tip>
+For MinIO or other self-hosted S3 services, enable `insecureTls: true` if using self-signed certificates (not recommended for production).
+</Tip>
+
+### Cloudflare R2
+
+Cloudflare R2 is S3-compatible object storage with zero egress fees, making it ideal for frequent restores.
+
+**Use cases:**
+- Cost-effective cloud backups
+- Frequent restore operations
+- Global edge storage
+
+**Configuration:**
+```json
+{
+  "backend": "r2",
+  "endpoint": "https://abc123.r2.cloudflarestorage.com",
+  "bucket": "backups",
+  "accessKeyId": "your-access-key-id",
+  "secretAccessKey": "encrypted-secret-key",
+  "isExistingRepository": false
+}
+```
+
+### Google Cloud Storage (GCS)
+
+Store backups on Google Cloud Platform's object storage service.
+
+**Use cases:**
+- GCP-native backup storage
+- Integration with existing GCP infrastructure
+- Nearline/Coldline storage classes for cost savings
+
+**Configuration:**
+```json
+{
+  "backend": "gcs",
+  "bucket": "my-backup-bucket",
+  "projectId": "my-gcp-project",
+  "credentialsJson": "{\"type\":\"service_account\",...}",
+  "isExistingRepository": false
+}
+```
+
+<Note>
+The `credentialsJson` should be a service account key with `storage.objects.create`, `storage.objects.delete`, and `storage.objects.get` permissions.
+</Note>
+
+### Azure Blob Storage
+
+Microsoft Azure's object storage service for enterprise backup scenarios.
+
+**Use cases:**
+- Azure-native backup storage
+- Compliance with Microsoft cloud requirements
+- Hot/Cool/Archive tier optimization
+
+**Configuration:**
+```json
+{
+  "backend": "azure",
+  "container": "backups",
+  "accountName": "mystorageaccount",
+  "accountKey": "encrypted-account-key",
+  "endpointSuffix": "core.windows.net",
+  "isExistingRepository": false
+}
+```
+
+### Rclone (40+ backends)
+
+Access any of rclone's 40+ supported backends including Dropbox, Google Drive, OneDrive, and more.
+
+**Use cases:**
+- Exotic cloud storage providers
+- Consumer cloud storage (with caveats)
+- Cross-cloud backup strategies
+
+**Configuration:**
+```json
+{
+  "backend": "rclone",
+  "remote": "myremote:backup-folder",
+  "path": "/zerobyte",
+  "isExistingRepository": false
+}
+```
+
+<Warning>
+Rclone backends may have rate limits or API quotas. Consumer services like Google Drive are not recommended for production backups.
+</Warning>
+
+### REST server
+
+Connect to a Restic REST server for network-based backup storage.
+
+**Use cases:**
+- Self-hosted backup servers
+- Custom backup infrastructure
+- REST-based backup appliances
+
+**Configuration:**
+```json
+{
+  "backend": "rest",
+  "url": "https://backup.example.com:8000",
+  "username": "backup-user",
+  "password": "encrypted-password",
+  "path": "/my-backups",
+  "isExistingRepository": false
+}
+```
+
+### SFTP
+
+Store repositories on remote servers accessible via SSH.
+
+**Use cases:**
+- Backup to remote Linux servers
+- VPS-based offsite storage
+- SSH-accessible backup targets
+
+**Configuration:**
+```json
+{
+  "backend": "sftp",
+  "host": "backup.example.com",
+  "port": 22,
+  "user": "backup",
+  "path": "/data/backups/zerobyte",
+  "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\n...",
+  "skipHostKeyCheck": false,
+  "knownHosts": "backup.example.com ssh-ed25519 AAAA...",
+  "isExistingRepository": false
+}
+```
+
+## Compression modes
+
+Zerobyte supports three compression modes that control how Restic compresses backup data:
+
+<AccordionGroup>
+  <Accordion title="Auto (default)" icon="wand-magic-sparkles">
+    Restic automatically decides whether to compress based on file type. This provides the best balance of speed and space savings.
+    
+    **Recommended for:** Most use cases
+  </Accordion>
+
+  <Accordion title="Off" icon="ban">
+    No compression is applied. Useful when backing up already-compressed data (videos, archives, compressed images) to avoid CPU overhead.
+    
+    **Recommended for:** Media libraries, pre-compressed archives
+  </Accordion>
+
+  <Accordion title="Max" icon="gauge-high">
+    Maximum compression using zstd level 15. Provides best space savings at the cost of CPU time.
+    
+    **Recommended for:** Text-heavy data, source code, databases (when CPU is not a bottleneck)
+  </Accordion>
+</AccordionGroup>
+
+Compression mode is set when creating a repository and applies to all backups stored in that repository.
+
+## Bandwidth limiting
+
+Control network usage by configuring upload and download limits per repository.
+
+### Upload limits
+
+Limit the speed at which Restic sends data to the repository during backup operations:
+
+```typescript
+{
+  uploadLimitEnabled: true,
+  uploadLimitValue: 10,
+  uploadLimitUnit: "Mbps"  // Kbps, Mbps, or Gbps
+}
+```
+
+**Use cases:**
+- Prevent backups from saturating production network links
+- Comply with ISP bandwidth caps
+- Ensure other services remain responsive during backups
+
+### Download limits
+
+Limit the speed at which Restic retrieves data during restore or snapshot operations:
+
+```typescript
+{
+  downloadLimitEnabled: true,
+  downloadLimitValue: 50,
+  downloadLimitUnit: "Mbps"
+}
+```
+
+**Use cases:**
+- Control egress costs on cloud providers
+- Prevent restore operations from consuming all available bandwidth
+
+<Tip>
+Bandwidth limits are enforced by Restic at the application layer. Actual network usage may be slightly higher due to protocol overhead.
+</Tip>
+
+## Repository operations
+
+Zerobyte provides several operations for managing repository health and integrity:
+
+### Health check
+
+Runs `restic check` to verify:
+- Repository structure is intact
+- All pack files are readable
+- Index consistency
+
+Health checks update the repository status and `lastChecked` timestamp.
+
+### Doctor (maintenance)
+
+A comprehensive maintenance operation that runs:
+
+1. **Check** - Verify repository integrity
+2. **Check --read-data** - Deep integrity check reading all data
+3. **Rebuild-index** - Reconstruct the repository index
+4. **Prune** - Remove unused data and reclaim space
+
+Doctor operations run in the background and can take hours for large repositories. Progress is streamed via server-sent events.
+
+<Warning>
+Doctor operations acquire an exclusive lock on the repository. Backups and restores are blocked until completion.
+</Warning>
+
+### Unlock
+
+Removes stale locks from the repository. Useful when:
+- A backup or restore operation was forcefully terminated
+- Zerobyte crashed during a repository operation
+- The repository shows "repository is locked" errors
+
+<Note>
+Only run unlock if you're certain no other Restic operations are accessing the repository.
+</Note>
+
+## How repositories work in Zerobyte
+
+### Repository initialization
+
+When you create a new repository (not marked as existing), Zerobyte:
+
+1. Encrypts sensitive credentials using `cryptoUtils.sealSecret()`
+2. Generates a unique `shortId` for the repository
+3. For local backends, appends the `shortId` to the path
+4. Runs `restic init` with the organization's restic password
+5. Verifies initialization by listing snapshots
+6. Updates status to "healthy" on success
+
+If initialization fails, the repository is immediately deleted from the database.
+
+### Credential encryption
+
+All sensitive fields are encrypted before storage:
+
+```typescript
+// From repositories.service.ts
+switch (config.backend) {
+  case "s3":
+  case "r2":
+    encryptedConfig.accessKeyId = await cryptoUtils.sealSecret(config.accessKeyId);
+    encryptedConfig.secretAccessKey = await cryptoUtils.sealSecret(config.secretAccessKey);
+    break;
+  case "gcs":
+    encryptedConfig.credentialsJson = await cryptoUtils.sealSecret(config.credentialsJson);
+    break;
+  case "azure":
+    encryptedConfig.accountKey = await cryptoUtils.sealSecret(config.accountKey);
+    break;
+}
+```
+
+This ensures that even if the database is compromised, repository credentials remain protected.
+
+### Repository locking (mutex)
+
+Zerobyte uses a repository mutex (`repoMutex`) to coordinate concurrent access:
+
+- **Shared locks** - Multiple read operations (backup, snapshots, restore) can run concurrently
+- **Exclusive locks** - Write operations (forget, prune, check, doctor) block all other access
+
+This prevents data corruption while maximizing parallelism.
+
+```typescript
+// Acquire shared lock for backup
+const releaseBackupLock = await repoMutex.acquireShared(repository.id, "backup:volumeName");
+
+// Acquire exclusive lock for maintenance
+const releaseLock = await repoMutex.acquireExclusive(repository.id, "check");
+```
+
+### Caching
+
+Zerobyte caches expensive repository operations to improve UI responsiveness:
+
+- **Snapshot lists** - Cached for faster browsing
+- **Repository stats** - Cached to avoid repeated `restic stats` calls
+- **Retention categories** - Cached retention policy calculations
+
+Caches are automatically invalidated when:
+- New backups complete
+- Snapshots are deleted
+- Retention policies run
+- Repository configuration changes
+
+## Database schema
+
+Repositories are stored in `repositories_table`:
+
+```typescript
+{
+  id: string,                    // UUID primary key
+  shortId: string,               // Human-friendly unique identifier
+  name: string,                  // Display name
+  type: RepositoryBackend,       // "local" | "s3" | "gcs" | etc.
+  config: RepositoryConfig,      // Backend-specific config (encrypted)
+  compressionMode: CompressionMode, // "off" | "auto" | "max"
+  status: RepositoryStatus,      // "healthy" | "error" | "unknown" | "doctor"
+  lastChecked: number | null,    // Last health check timestamp
+  lastError: string | null,      // Error from last operation
+  doctorResult: DoctorResult | null, // Results from last doctor run
+  uploadLimitEnabled: boolean,
+  uploadLimitValue: number,
+  uploadLimitUnit: BandwidthUnit,
+  downloadLimitEnabled: boolean,
+  downloadLimitValue: number,
+  downloadLimitUnit: BandwidthUnit,
+  organizationId: string,        // Multi-tenant isolation
+  createdAt: number,
+  updatedAt: number
+}
+```
+
+## Snapshots
+
+Each backup creates a snapshot in the repository. Snapshots are:
+
+- **Immutable** - Cannot be modified after creation
+- **Incremental** - Only store changed data
+- **Tagged** - Automatically tagged with backup schedule `shortId`
+- **Browsable** - File-level browsing via `restic ls`
+
+See [Backups](/concepts/backups) for more details on how snapshots are created and managed.
+
+## Mirror repositories
+
+Zerobyte supports copying snapshots to mirror repositories for:
+
+- **Geographic redundancy** - Store copies in different regions
+- **Provider diversification** - Don't rely on a single cloud provider
+- **Compliance** - Meet data locality requirements
+
+Mirrors are configured per backup schedule. After each successful backup, snapshots are automatically copied to all enabled mirror repositories.
+
+<Tip>
+Mirror repositories must be compatible with the primary repository's backend. See [Backup Jobs](/concepts/backups#mirror-repositories) for compatibility details.
+</Tip>
+
+## Best practices
+
+<AccordionGroup>
+  <Accordion title="Use separate repositories for different data classes">
+    Create distinct repositories for:
+    - **Critical data** - Fast, expensive storage with frequent retention
+    - **Archive data** - Cheap, slow storage with long retention
+    - **Test/development** - Separate from production
+    
+    This allows optimized retention policies and storage costs per data class.
+  </Accordion>
+
+  <Accordion title="Enable bandwidth limits for cloud repositories">
+    Prevent backup operations from saturating your internet connection, especially during business hours.
+  </Accordion>
+
+  <Accordion title="Run doctor monthly for production repositories">
+    Schedule monthly maintenance using the doctor operation to:
+    - Verify data integrity
+    - Reclaim storage from deleted snapshots
+    - Rebuild corrupted indexes
+  </Accordion>
+
+  <Accordion title="Use custom passwords sparingly">
+    By default, all repositories in an organization share the same Restic password. Only use `customPassword` if you need repository-level isolation (increases key management complexity).
+  </Accordion>
+
+  <Accordion title="Test restore operations regularly">
+    Backups are only as good as your ability to restore. Schedule periodic restore tests to verify:
+    - Data can be recovered
+    - Recovery time meets your RTO
+    - Restored data is complete and consistent
+  </Accordion>
+
+  <Accordion title="Monitor repository health">
+    Set up alerts for:
+    - Repository status changes to "error"
+    - Failed doctor operations
+    - Unexpected growth in repository size
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Understand backups" icon="calendar-days" href="/concepts/backups">
+    Learn how backup schedules create snapshots in repositories
+  </Card>
+  <Card title="Retention policies" icon="clock-rotate-left" href="/concepts/retention-policies">
+    Configure how long snapshots are kept in repositories
+  </Card>
+  <Card title="Repository setup guide" icon="database" href="/guides/creating-repositories">
+    Step-by-step instructions for creating repositories
+  </Card>
+  <Card title="Rclone integration" icon="cloud" href="/advanced/rclone-integration">
+    Access 40+ storage backends via rclone
+  </Card>
+</CardGroup>

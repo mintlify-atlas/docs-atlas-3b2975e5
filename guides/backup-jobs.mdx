@@ -1,0 +1,456 @@
+---
+title: "Backup Jobs"
+description: "Schedule and manage automated backup jobs with retention policies"
+---
+
+Backup jobs (also called backup schedules) automate the process of backing up volumes to repositories on a recurring schedule. Each job defines what to back up, where to store it, when to run, and how long to keep snapshots.
+
+## Creating a Backup Job
+
+<Steps>
+  <Step title="Navigate to Backups">
+    Click **Backups** in the sidebar to view all backup schedules.
+  </Step>
+
+  <Step title="Create New Schedule">
+    Click the **New Backup Schedule** button.
+  </Step>
+
+  <Step title="Configure Basic Settings">
+    - **Name**: Descriptive name for the backup job (e.g., "Daily Media Backup")
+    - **Volume**: Select the volume to back up
+    - **Repository**: Choose the destination repository
+    - **Enabled**: Toggle to activate/deactivate the schedule
+  </Step>
+
+  <Step title="Set Schedule">
+    Configure when the backup should run using a cron expression.
+    
+    **Common examples:**
+    - Daily at 2 AM: `0 2 * * *`
+    - Every 6 hours: `0 */6 * * *`
+    - Weekly on Sunday at midnight: `0 0 * * 0`
+    - Monthly on the 1st at 3 AM: `0 3 1 * *`
+    
+    <Tip>
+    Zerobyte provides a visual cron editor to help you build schedules without memorizing cron syntax.
+    </Tip>
+  </Step>
+
+  <Step title="Configure Retention Policy (Optional)">
+    Define how long to keep snapshots. See [Retention Policies](#retention-policies) below.
+  </Step>
+
+  <Step title="Set Backup Filters (Optional)">
+    Configure include/exclude patterns to control what gets backed up. See [Backup Filters](#backup-filters) below.
+  </Step>
+
+  <Step title="Add Tags (Optional)">
+    Add custom tags to snapshots for easier organization and filtering.
+  </Step>
+
+  <Step title="Save Schedule">
+    Click **Create Schedule** to save. The next backup time will be calculated automatically.
+  </Step>
+</Steps>
+
+## Backup Schedule Configuration
+
+### Cron Expressions
+
+Cron expressions define when backups run. The format is:
+
+```
+┌───────────── minute (0 - 59)
+│ ┌───────────── hour (0 - 23)
+│ │ ┌───────────── day of month (1 - 31)
+│ │ │ ┌───────────── month (1 - 12)
+│ │ │ │ ┌───────────── day of week (0 - 6) (Sunday to Saturday)
+│ │ │ │ │
+│ │ │ │ │
+* * * * *
+```
+
+**Examples:**
+
+| Expression | Description |
+|------------|-------------|
+| `0 2 * * *` | Daily at 2:00 AM |
+| `0 */4 * * *` | Every 4 hours |
+| `30 3 * * 1` | Every Monday at 3:30 AM |
+| `0 0 1,15 * *` | 1st and 15th of month at midnight |
+| `0 0 * * 0` | Every Sunday at midnight |
+| `*/15 * * * *` | Every 15 minutes |
+
+<Warning>
+Consider your server's timezone when setting schedules. The container uses the timezone set in the `TZ` environment variable.
+</Warning>
+
+### One File System
+
+Enable this option to prevent backups from crossing filesystem boundaries. Useful when backing up directories that might contain mount points.
+
+**Use case:** When backing up `/home`, prevent including `/home/user/mnt` if it's a separate mount.
+
+## Retention Policies
+
+Retention policies automatically clean up old snapshots to manage storage usage. Configure multiple rules to keep different snapshot types.
+
+### Retention Rules
+
+- **Keep Last**: Keep the most recent N snapshots
+- **Keep Hourly**: Keep the last snapshot for each of the last N hours
+- **Keep Daily**: Keep the last snapshot for each of the last N days
+- **Keep Weekly**: Keep the last snapshot for each of the last N weeks
+- **Keep Monthly**: Keep the last snapshot for each of the last N months
+- **Keep Yearly**: Keep the last snapshot for each of the last N years
+- **Keep Within Duration**: Keep all snapshots within a time period (e.g., "7d", "3m", "1y")
+
+### Retention Policy Examples
+
+<AccordionGroup>
+  <Accordion title="Simple: Keep Last 7 Backups">
+    ```json
+    {
+      "keepLast": 7
+    }
+    ```
+    
+    Keeps only the 7 most recent snapshots, regardless of when they were created.
+  </Accordion>
+
+  <Accordion title="Tiered: 7 Daily + 4 Weekly + 12 Monthly">
+    ```json
+    {
+      "keepDaily": 7,
+      "keepWeekly": 4,
+      "keepMonthly": 12
+    }
+    ```
+    
+    - Last 7 days: one snapshot per day
+    - Last 4 weeks: one snapshot per week
+    - Last 12 months: one snapshot per month
+  </Accordion>
+
+  <Accordion title="Duration-Based: Keep 30 Days">
+    ```json
+    {
+      "keepWithinDuration": "30d"
+    }
+    ```
+    
+    Keeps all snapshots from the last 30 days.
+    
+    Valid duration units:
+    - `h` - hours (e.g., "24h")
+    - `d` - days (e.g., "7d")
+    - `w` - weeks (e.g., "4w")
+    - `m` - months (e.g., "3m")
+    - `y` - years (e.g., "1y")
+  </Accordion>
+
+  <Accordion title="Comprehensive: Long-Term Storage">
+    ```json
+    {
+      "keepLast": 3,
+      "keepDaily": 7,
+      "keepWeekly": 4,
+      "keepMonthly": 12,
+      "keepYearly": 5
+    }
+    ```
+    
+    - Always keep last 3 backups
+    - Last 7 days: one snapshot per day
+    - Last 4 weeks: one snapshot per week
+    - Last 12 months: one snapshot per month
+    - Last 5 years: one snapshot per year
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+Retention rules can be combined. A snapshot is kept if it matches ANY rule, ensuring you never accidentally delete important backups.
+</Tip>
+
+### Applying Retention Policies
+
+Retention policies are automatically applied after each successful backup. You can also manually trigger retention cleanup:
+
+1. Navigate to the backup schedule
+2. Click **Run Retention** (forget)
+3. Review the snapshots that will be removed
+4. Confirm the operation
+
+<Warning>
+Manually deleting snapshots cannot be undone. Always verify retention policies in a test environment before applying them to production data.
+</Warning>
+
+## Backup Filters
+
+Control which files and directories are included in backups using pattern matching.
+
+### Include Patterns
+
+Explicitly include specific files or directories. When include patterns are set, only matching files are backed up.
+
+**Examples:**
+```
+/documents/**
+/photos/**/*.jpg
+/config.yaml
+```
+
+### Exclude Patterns
+
+Exclude specific files or directories from backups.
+
+**Common exclusions:**
+```
+**/.git/
+**/node_modules/
+**/*.tmp
+**/*.log
+**/cache/**
+**/.cache/**
+**/Thumbs.db
+**/.DS_Store
+```
+
+**Wildcards:**
+- `*` - Matches any characters except `/`
+- `**` - Matches any characters including `/`
+- `?` - Matches exactly one character
+- `[abc]` - Matches one character from the set
+- `[a-z]` - Matches one character from the range
+
+### Exclude If Present
+
+Skip directories containing a specific file. Useful for letting applications opt-out of backups.
+
+**Example:**
+```
+.nobackup
+NOBACKUP
+```
+
+If Zerobyte encounters a directory containing `.nobackup`, it skips that entire directory.
+
+### Pattern Examples
+
+<AccordionGroup>
+  <Accordion title="Exclude All Video Files">
+    ```
+    **/*.mp4
+    **/*.avi
+    **/*.mkv
+    **/*.mov
+    ```
+  </Accordion>
+
+  <Accordion title="Exclude Temporary and Cache Files">
+    ```
+    **/.cache/**
+    **/cache/**
+    **/tmp/**
+    **/*.tmp
+    **/*.temp
+    **/*.cache
+    ```
+  </Accordion>
+
+  <Accordion title="Include Only Configuration Files">
+    Include patterns:
+    ```
+    **/*.yaml
+    **/*.yml
+    **/*.json
+    **/*.conf
+    **/*.config
+    ```
+  </Accordion>
+
+  <Accordion title="Exclude Development Directories">
+    ```
+    **/node_modules/**
+    **/.git/**
+    **/.venv/**
+    **/venv/**
+    **/__pycache__/**
+    **/target/**
+    **/build/**
+    **/dist/**
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Running Backups
+
+### Automatic Execution
+
+Once enabled, backup schedules run automatically at the configured times. The next scheduled run time is shown on the backup schedule details page.
+
+### Manual Execution
+
+Run a backup immediately without waiting for the schedule:
+
+1. Navigate to the backup schedule
+2. Click **Run Now**
+3. Monitor the backup progress in real-time
+
+### Monitoring Progress
+
+During a backup, Zerobyte displays:
+- Files scanned
+- Bytes processed
+- Upload speed
+- Estimated time remaining
+- Current file being backed up
+
+### Stopping Backups
+
+To cancel a running backup:
+
+1. Navigate to the backup schedule
+2. Click **Stop Backup**
+3. Confirm the cancellation
+
+<Note>
+Stopping a backup is safe. Partial data is not committed to the repository, and you can retry the backup later.
+</Note>
+
+## Backup Mirrors
+
+Mirrors automatically copy snapshots to additional repositories for redundancy.
+
+<Steps>
+  <Step title="Open Mirror Settings">
+    Navigate to a backup schedule and click the **Mirrors** tab.
+  </Step>
+
+  <Step title="Add Mirror Repository">
+    Select a secondary repository to mirror backups to.
+  </Step>
+
+  <Step title="Enable Mirror">
+    Toggle the mirror to enable automatic copying after each successful backup.
+  </Step>
+
+  <Step title="Verify Compatibility">
+    Zerobyte checks if repositories are compatible (same password/encryption).
+  </Step>
+</Steps>
+
+<Tip>
+Use mirrors to implement the 3-2-1 backup strategy: one local repository and one cloud repository.
+</Tip>
+
+## Backup Tags
+
+Tags help organize and filter snapshots. Common use cases:
+
+- Environment tags: `production`, `development`, `staging`
+- Application tags: `database`, `media`, `documents`
+- Purpose tags: `daily`, `weekly`, `monthly`
+
+**Example tags:**
+```
+production
+automated
+media-server
+```
+
+## Backup Status
+
+Each backup schedule shows its status:
+
+- **Success** (green): Last backup completed successfully
+- **Warning** (yellow): Backup completed with warnings
+- **Error** (red): Last backup failed
+- **In Progress** (blue): Backup currently running
+
+Click on a schedule to view:
+- Last backup time
+- Next scheduled backup time
+- Backup duration
+- Error messages (if any)
+- List of snapshots created by this schedule
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Backup fails immediately">
+    - Verify the volume is mounted and accessible
+    - Check repository connectivity and authentication
+    - Review backup schedule settings for errors
+    - Check container logs for detailed error messages
+  </Accordion>
+
+  <Accordion title="Backup takes too long">
+    - Reduce the amount of data by using exclude patterns
+    - Check network bandwidth between Zerobyte and the repository
+    - Consider backing up during off-peak hours
+    - Use bandwidth limiting if competing with other services
+  </Accordion>
+
+  <Accordion title="Repository runs out of space">
+    - Review and adjust retention policies
+    - Run retention cleanup manually to free space
+    - Consider using a larger repository or archival storage
+    - Check for failed backups creating orphaned data
+  </Accordion>
+
+  <Accordion title="Backups don't run on schedule">
+    - Verify the schedule is enabled
+    - Check the cron expression is correct
+    - Ensure container timezone (`TZ`) is set correctly
+    - Check if a previous backup is still running (blocks new runs)
+  </Accordion>
+
+  <Accordion title="Files are missing from backups">
+    - Review include/exclude patterns
+    - Check for directories with "exclude if present" markers
+    - Verify file permissions allow reading
+    - Ensure "one file system" isn't excluding mounted directories
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Schedule backups during off-hours">
+    Run backups when systems are least active to minimize performance impact and ensure consistent data.
+  </Accordion>
+
+  <Accordion title="Use appropriate retention policies">
+    Balance storage costs with recovery needs. More frequent recent backups, fewer older backups.
+  </Accordion>
+
+  <Accordion title="Test your backups regularly">
+    Periodically restore files to verify backups are working correctly. See [Restoring Data](/guides/restoring-data).
+  </Accordion>
+
+  <Accordion title="Monitor backup status">
+    Set up notifications for failed backups. Don't wait until you need a restore to discover backups aren't working.
+  </Accordion>
+
+  <Accordion title="Use exclude patterns wisely">
+    Exclude temporary files, caches, and other regeneratable data to reduce backup size and time.
+  </Accordion>
+
+  <Accordion title="Implement the 3-2-1 strategy">
+    Use mirror repositories to keep copies in multiple locations (local + cloud).
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Restore Data" icon="clock-rotate-left" href="/guides/restoring-data">
+    Learn how to browse snapshots and restore files
+  </Card>
+  
+  <Card title="Configure Notifications" icon="bell" href="/guides/notifications">
+    Get alerts when backups succeed or fail
+  </Card>
+</CardGroup>

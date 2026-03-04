@@ -1,0 +1,304 @@
+---
+title: Organizations
+description: Multi-tenancy, team collaboration, and organization management in Zerobyte
+---
+
+Zerobyte supports multi-tenancy through organizations, allowing you to isolate backups, repositories, volumes, and schedules for different teams or projects within a single Zerobyte instance.
+
+## Overview
+
+Organizations provide:
+
+- **Resource Isolation** - Each organization has its own repositories, volumes, schedules, and backups
+- **Team Collaboration** - Multiple users can be members of an organization
+- **Role-Based Access** - Owner, admin, and member roles with different permissions
+- **Separate Encryption Keys** - Each organization has its own Restic password for backup encryption
+
+## Organization Structure
+
+Each Zerobyte instance can have multiple organizations. Users can be members of one organization at a time, and organization owners or admins can manage resources and members.
+
+### Organization Roles
+
+There are three roles within an organization:
+
+| Role | Permissions |
+|------|-------------|
+| **Owner** | Full control over the organization, including member management, resource management, and organization settings. Cannot be removed or have role changed. |
+| **Admin** | Can manage members (except owner), create/edit/delete repositories, volumes, schedules, and backups. Cannot modify owner role or remove owner. |
+| **Member** | Can view repositories and backups, run manual backups, and restore data. Cannot modify organization settings or manage other members. |
+
+<Note>
+Every organization must have exactly one owner. The owner role is permanent and cannot be transferred or removed.
+</Note>
+
+## Creating Organizations
+
+Organizations are typically created during initial setup. When the first user signs up, a default organization is automatically created with that user as the owner.
+
+<Tip>
+Additional organizations can be created by users with the global **admin** role through the Zerobyte UI.
+</Tip>
+
+## Managing Organization Members
+
+### Inviting Members
+
+Owners and admins can invite users to join their organization:
+
+1. Navigate to **Settings** > **Organization** > **Members**
+2. Click **Invite Member**
+3. Enter the user's email address
+4. Select a role (admin or member)
+5. Click **Send Invitation**
+
+The invited user will receive an email with an invitation link. Once they accept, they become a member of the organization.
+
+### Changing Member Roles
+
+Owners and admins can change member roles:
+
+```bash
+# Via CLI
+docker exec zerobyte zerobyte assign-organization \
+  --username john_doe \
+  --organization engineering
+```
+
+Or through the web UI:
+
+1. Go to **Settings** > **Organization** > **Members**
+2. Find the member to modify
+3. Click the role dropdown
+4. Select new role (admin or member)
+
+<Warning>
+The owner role cannot be changed or transferred. Attempting to change an owner's role will result in an error.
+</Warning>
+
+### Removing Members
+
+Owners and admins can remove members from the organization:
+
+1. Navigate to **Settings** > **Organization** > **Members**
+2. Find the member to remove
+3. Click **Remove** or the delete icon
+4. Confirm the action
+
+**Restrictions:**
+- Cannot remove the organization owner
+- Removing a member invalidates their sessions
+- Removed members lose access to all organization resources
+
+## Switching Between Organizations
+
+If you're a member of multiple organizations (through the CLI), you can switch between them:
+
+1. Click the **organization switcher** in the top navigation
+2. Select the organization you want to switch to
+3. The interface will reload with that organization's resources
+
+Your active organization is stored in your session and persists across logins.
+
+## Organization Resources
+
+Each organization maintains its own isolated set of resources:
+
+### Repositories
+
+Backup repositories are scoped to organizations. A repository created in one organization is not visible or accessible from another organization.
+
+**Encryption:** Each organization has its own `resticPassword` stored in the organization metadata, used to encrypt all repositories within that organization.
+
+### Volumes
+
+Volumes (data sources) are organization-specific. Volumes configured in one organization won't appear in another, ensuring data isolation.
+
+### Schedules
+
+Backup schedules are tied to the organization. Scheduled backups run within the context of their organization's repositories and volumes.
+
+### Snapshots
+
+Backup snapshots are stored in organization repositories and are isolated per organization.
+
+## Organization Settings
+
+### Restic Password
+
+Each organization has a unique Restic password used for encrypting backup repositories. This password is:
+
+- Automatically generated during organization creation
+- Stored securely in the organization metadata
+- Used by all repositories within the organization
+- Derived from the application's `APP_SECRET`
+
+<Warning>
+If you change the `APP_SECRET` environment variable, you must re-key the organization encryption keys. See [CLI Commands](/advanced/cli-commands#rekey-2fa) for details.
+</Warning>
+
+### Organization Metadata
+
+Organization metadata includes:
+
+```typescript
+type OrganizationMetadata = {
+  resticPassword: string;  // Encrypted backup repository password
+};
+```
+
+This metadata is stored in the database and managed automatically by Zerobyte.
+
+## Moving Users Between Organizations
+
+Users can be assigned to different organizations using the CLI:
+
+```bash
+docker exec zerobyte zerobyte assign-organization \
+  --username john_doe \
+  --organization sales
+```
+
+This will:
+- Remove the user from their current organization (if any)
+- Add them to the target organization
+- Preserve their role if they had one
+- Invalidate all active sessions
+
+**Use Case:** Useful for reorganizing teams or when users change departments.
+
+See [CLI Commands](/advanced/cli-commands#assign-organization) for more details.
+
+## Organization Context
+
+Zerobyte uses organization context throughout the application:
+
+```typescript
+// Server-side: Get active organization
+const organizationId = getOrganizationId();
+
+// All operations are scoped to this organization
+const volumes = await db.query.volumes.findMany({
+  where: { organizationId }
+});
+```
+
+The active organization is determined by:
+1. The session's `activeOrganizationId` field
+2. Falls back to the user's membership if not set
+
+This ensures all operations are automatically scoped to the correct organization.
+
+## Permissions and Access Control
+
+### Organization-Level Permissions
+
+Operations requiring organization admin or owner:
+
+- Create/edit/delete repositories
+- Create/edit/delete volumes
+- Create/edit/delete schedules
+- Manage organization members
+- Update organization settings
+- Invite new members
+
+Operations available to all members:
+
+- View repositories and backups
+- Run manual backups
+- Restore snapshots
+- View backup logs
+
+### Global Admin Role
+
+Users with the global `admin` role (separate from organization roles) can:
+
+- Create new organizations
+- View all users across organizations
+- Manage user accounts system-wide
+- Delete SSO accounts
+- Access system-wide settings
+
+<Note>
+The global admin role is different from organization roles. A user can be a global admin but only a member in a specific organization.
+</Note>
+
+## Multi-Organization Best Practices
+
+1. **One Organization Per Team/Project** - Keep logical separation between different teams or projects
+2. **Least Privilege** - Assign users the minimum role needed (member by default)
+3. **Owner Responsibility** - Designate owners carefully as they have permanent full control
+4. **Regular Audits** - Periodically review organization membership and remove inactive users
+5. **Naming Convention** - Use clear organization names and slugs (e.g., `engineering`, `marketing`)
+6. **Separate Repositories** - Don't share repository credentials between organizations
+7. **Backup Organization Data** - Document organization structure and membership
+
+## Organization Deletion
+
+When an organization is deleted:
+
+1. All members are removed from the organization
+2. All repositories belonging to the organization are deleted
+3. All volumes, schedules, and snapshots are removed
+4. The organization's Restic password is permanently lost
+
+<Warning>
+Organization deletion is irreversible. Ensure all important backups are copied to another location before deleting an organization.
+</Warning>
+
+## API Integration
+
+Organization context is automatically included in all API requests:
+
+```typescript
+// Client-side: Get organization context
+import { getOrganizationContext } from '~/server/lib/functions/organization-context';
+
+const { activeOrganization, organizations, activeMember } = 
+  await getOrganizationContext();
+```
+
+API responses are filtered to only include resources from the active organization.
+
+## Troubleshooting
+
+### "No organizations found for user"
+
+This error occurs when a user is not a member of any organization.
+
+**Solution:**
+```bash
+# Assign user to an organization
+docker exec zerobyte zerobyte assign-organization \
+  --username john_doe \
+  --organization default
+```
+
+### Cannot modify owner role
+
+Attempting to change or remove an organization owner will fail.
+
+**Solution:** This is by design. Owners have permanent control over their organizations.
+
+### User can't see resources after joining
+
+User might be in the wrong organization or sessions need to be refreshed.
+
+**Solution:**
+1. Log out and log back in
+2. Verify active organization using the organization switcher
+3. Check membership with an organization admin
+
+### Permission denied errors
+
+User might not have sufficient role permissions.
+
+**Solution:** Organization owner or admin should update the user's role:
+- Member → Admin (for management tasks)
+- Contact global admin if organization-level access is insufficient
+
+## Related Resources
+
+- [CLI Commands](/advanced/cli-commands) - Command-line tools for organization management
+- [Troubleshooting](/advanced/troubleshooting) - Common issues and solutions
+- [API Reference](/api-reference) - Programmatic organization management

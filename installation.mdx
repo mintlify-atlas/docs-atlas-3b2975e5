@@ -1,0 +1,415 @@
+---
+title: Installation
+description: Deploy Zerobyte with Docker and Docker Compose
+---
+
+# Installation
+
+Zerobyte runs as a Docker container and requires Docker and Docker Compose to be installed on your server.
+
+## Prerequisites
+
+<Steps>
+  <Step title="Install Docker">
+    Ensure Docker is installed on your server. Visit [docs.docker.com](https://docs.docker.com/get-docker/) for installation instructions for your platform.
+  </Step>
+  
+  <Step title="Install Docker Compose">
+    Docker Compose is required for orchestration. It's included with Docker Desktop or can be installed separately on Linux servers.
+  </Step>
+  
+  <Step title="Check Installation">
+    Verify your installation by running:
+    ```bash
+    docker --version
+    docker compose version
+    ```
+  </Step>
+</Steps>
+
+## Basic Installation
+
+The standard installation includes remote mount support (NFS, SMB, WebDAV, SFTP) and requires elevated container capabilities.
+
+### 1. Create docker-compose.yml
+
+Create a `docker-compose.yml` file with the following configuration:
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+    ports:
+      - "4096:4096"
+    devices:
+      - /dev/fuse:/dev/fuse
+    environment:
+      - TZ=Europe/Paris # Set your timezone here
+      - BASE_URL=http://localhost:4096 # URL you will use to access Zerobyte
+      - APP_SECRET=94bad46...c66e25d5c2b # Generate your own secret with `openssl rand -hex 32`
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+```
+
+<Warning>
+  **Security Note**: The `SYS_ADMIN` capability and `/dev/fuse` device are required for mounting remote filesystems (NFS, SMB, WebDAV, SFTP). If you only need local directory backups, see the [Simplified Installation](#simplified-installation-no-remote-mounts) section below.
+</Warning>
+
+### 2. Configure Environment Variables
+
+Update the environment variables in your `docker-compose.yml`:
+
+<CodeGroup>
+```bash Generate APP_SECRET
+openssl rand -hex 32
+```
+
+```yaml Example Configuration
+environment:
+  - TZ=America/New_York
+  - BASE_URL=http://192.168.1.100:4096
+  - APP_SECRET=a1b2c3d4e5f6...  # Output from openssl command
+```
+</CodeGroup>
+
+#### Required Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `BASE_URL` | **Required.** The base URL where Zerobyte will be accessed. Used for cookie security and CORS. | `http://localhost:4096` or `https://zerobyte.example.com` |
+| `APP_SECRET` | **Required.** A 32+ character random secret for encrypting sensitive data in the database. Generate with `openssl rand -hex 32`. | `94bad46...c66e25d5c2b` |
+| `TZ` | **Recommended.** Timezone for accurate backup scheduling. | `Europe/Paris`, `America/New_York`, `UTC` |
+
+<Info>
+  The `BASE_URL` determines cookie security behavior:
+  - **HTTP or IP addresses**: Secure cookies disabled (allows local access)
+  - **HTTPS with domain**: Secure cookies enabled (required for production)
+</Info>
+
+#### Optional Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|--------|
+| `PORT` | Port the web interface listens on inside the container | `4096` |
+| `RESTIC_HOSTNAME` | Hostname used by Restic in snapshots | `zerobyte` |
+| `TRUSTED_ORIGINS` | Comma-separated list of additional trusted CORS origins | (none) |
+| `LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warn`, `error` | `info` |
+| `SERVER_IDLE_TIMEOUT` | Server idle timeout in seconds | `60` |
+| `RCLONE_CONFIG_DIR` | Path to rclone config directory inside container | `/root/.config/rclone` |
+
+### 3. Configure Volume Mounts
+
+The essential volume mount stores Zerobyte's data:
+
+```yaml
+volumes:
+  - /etc/localtime:/etc/localtime:ro
+  - /var/lib/zerobyte:/var/lib/zerobyte
+```
+
+<Warning>
+  **Important**: Do not point `/var/lib/zerobyte` to a network share. This will cause permission issues and severe performance degradation. Always use local storage.
+</Warning>
+
+<Note>
+  **TrueNAS Users**: The `/var/lib` path is ephemeral on TrueNAS and resets during system upgrades. Instead, create a dedicated ZFS dataset:
+  
+  ```yaml
+  volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - /mnt/tank/docker/zerobyte:/var/lib/zerobyte
+  ```
+  
+  This ensures your configuration, encryption keys, and database persist across upgrades.
+</Note>
+
+### 4. Start Zerobyte
+
+Start the container using Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+Verify the container is running:
+
+```bash
+docker compose ps
+docker compose logs -f zerobyte
+```
+
+### 5. Access the Web Interface
+
+Once the container is running, access Zerobyte at the URL you specified in `BASE_URL`:
+
+```
+http://<your-server-ip>:4096
+```
+
+<Tip>
+  On first access, you'll be prompted to create an admin account. This account will have full access to all backup management features.
+</Tip>
+
+## Simplified Installation (No Remote Mounts)
+
+If you only need to back up locally mounted directories and don't require remote share mounting (NFS, SMB, WebDAV, SFTP), you can use a reduced-privilege deployment:
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    ports:
+      - "4096:4096"
+    environment:
+      - TZ=Europe/Paris
+      - BASE_URL=http://localhost:4096
+      - APP_SECRET=94bad46...c66e25d5c2b
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+      - /path/to/your/directory:/mydata
+```
+
+**Trade-offs:**
+
+- ✅ Improved security by removing `SYS_ADMIN` capability
+- ✅ Support for local directories mounted into the container
+- ✅ All repository types still supported (local, S3, GCS, Azure, rclone)
+- ❌ Cannot mount remote shares (NFS, SMB, WebDAV, SFTP) from within Zerobyte
+
+<Info>
+  If you need remote mount capabilities later, you can update your `docker-compose.yml` to add back the `cap_add: SYS_ADMIN` and `devices: /dev/fuse:/dev/fuse` directives.
+</Info>
+
+## Mounting Local Directories
+
+To back up directories from your host system, mount them into the container:
+
+```yaml
+volumes:
+  - /etc/localtime:/etc/localtime:ro
+  - /var/lib/zerobyte:/var/lib/zerobyte
+  - /path/to/your/photos:/photos:ro
+  - /path/to/your/documents:/documents:ro
+  - /path/to/your/media:/media:ro
+```
+
+<Tip>
+  Use read-only mounts (`:ro`) when possible to prevent accidental modifications during backup operations.
+</Tip>
+
+After adding volume mounts, restart the container:
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+The mounted directories will be available inside the container at the specified paths (e.g., `/photos`, `/documents`, `/media`).
+
+## Advanced Configuration
+
+### Using Docker Secrets for Sensitive Data
+
+Zerobyte supports reading secrets from environment variables or Docker secrets files instead of storing them encrypted in the database:
+
+```yaml docker-compose.yml
+services:
+  zerobyte:
+    image: ghcr.io/nicotsx/zerobyte:v0.29
+    container_name: zerobyte
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    ports:
+      - "4096:4096"
+    environment:
+      - TZ=Europe/Paris
+      - BASE_URL=http://localhost:4096
+      - APP_SECRET=94bad46...c66e25d5c2b
+      - S3_ACCESS_KEY=your-access-key
+      - S3_SECRET_KEY=your-secret-key
+    secrets:
+      - smb_password
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+
+secrets:
+  smb_password:
+    file: ./secrets/smb_password.txt
+```
+
+When configuring volumes or repositories in the UI, you can reference these secrets:
+
+- `env://S3_SECRET_KEY` - Reads from environment variable `S3_SECRET_KEY`
+- `file://smb_password` - Reads from `/run/secrets/smb_password`
+
+### Mounting rclone Configuration
+
+To use rclone-based repositories (Google Drive, Dropbox, OneDrive, etc.), mount your rclone configuration:
+
+<Steps>
+  <Step title="Configure rclone on Host">
+    Install and configure rclone on your host system:
+    ```bash
+    curl https://rclone.org/install.sh | sudo bash
+    rclone config
+    ```
+  </Step>
+  
+  <Step title="Mount Config into Container">
+    Update your `docker-compose.yml`:
+    ```yaml
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/lib/zerobyte:/var/lib/zerobyte
+      - ~/.config/rclone:/root/.config/rclone:ro
+    ```
+  </Step>
+  
+  <Step title="Restart Container">
+    ```bash
+    docker compose down && docker compose up -d
+    ```
+  </Step>
+</Steps>
+
+Your rclone remotes will now be available when creating repositories in Zerobyte.
+
+### Reverse Proxy Setup
+
+When running Zerobyte behind a reverse proxy (Nginx, Traefik, Caddy):
+
+1. Set `BASE_URL` to your HTTPS domain: `https://zerobyte.example.com`
+2. Ensure your proxy passes the `X-Forwarded-Proto` header
+3. Secure cookies will automatically be enabled based on the `https://` prefix
+
+<Tabs>
+  <Tab title="Nginx">
+    ```nginx nginx.conf
+    server {
+        listen 443 ssl http2;
+        server_name zerobyte.example.com;
+
+        ssl_certificate /path/to/cert.pem;
+        ssl_certificate_key /path/to/key.pem;
+
+        location / {
+            proxy_pass http://localhost:4096;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Caddy">
+    ```caddyfile Caddyfile
+    zerobyte.example.com {
+        reverse_proxy localhost:4096
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Traefik">
+    ```yaml docker-compose.yml
+    services:
+      zerobyte:
+        image: ghcr.io/nicotsx/zerobyte:v0.29
+        labels:
+          - "traefik.enable=true"
+          - "traefik.http.routers.zerobyte.rule=Host(`zerobyte.example.com`)"
+          - "traefik.http.routers.zerobyte.entrypoints=websecure"
+          - "traefik.http.routers.zerobyte.tls.certresolver=letsencrypt"
+          - "traefik.http.services.zerobyte.loadbalancer.server.port=4096"
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  **Important**: If you expose Zerobyte to the internet, bind the port to localhost only (`127.0.0.1:4096:4096`) and use a secure tunnel (SSH tunnel, Cloudflare Tunnel, etc.) with additional authentication.
+</Warning>
+
+## Updating Zerobyte
+
+To update to a new version:
+
+```bash
+# Pull the latest image
+docker compose pull
+
+# Restart with new image
+docker compose up -d
+
+# View logs
+docker compose logs -f zerobyte
+```
+
+<Info>
+  Always check the [release notes](https://github.com/nicotsx/zerobyte/releases) before updating, especially for v0.x.x versions which may include breaking changes.
+</Info>
+
+## Troubleshooting
+
+### Container Won't Start
+
+1. Check logs: `docker compose logs zerobyte`
+2. Verify `APP_SECRET` is set and at least 32 characters
+3. Ensure `/var/lib/zerobyte` directory has correct permissions
+4. Verify port 4096 is not already in use: `netstat -tuln | grep 4096`
+
+### Permission Issues
+
+If you encounter permission errors:
+
+```bash
+# Fix ownership of data directory
+sudo chown -R 1000:1000 /var/lib/zerobyte
+```
+
+### Cannot Mount Remote Shares
+
+Ensure your container has the necessary capabilities:
+
+```yaml
+cap_add:
+  - SYS_ADMIN
+devices:
+  - /dev/fuse:/dev/fuse
+```
+
+### Logs
+
+View detailed logs with:
+
+```bash
+# Follow logs in real-time
+docker compose logs -f zerobyte
+
+# View last 100 lines
+docker compose logs --tail=100 zerobyte
+
+# Enable debug logging
+# Add to docker-compose.yml environment:
+- LOG_LEVEL=debug
+```
+
+## Next Steps
+
+Now that Zerobyte is installed, proceed to the Quick Start guide to configure your first backup:
+
+<Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+  Set up your first volume, repository, and backup job
+</Card>

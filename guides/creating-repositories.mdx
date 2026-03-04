@@ -1,0 +1,403 @@
+---
+title: "Creating Repositories"
+description: "Configure encrypted backup destinations for your data"
+---
+
+Repositories are encrypted storage locations where Zerobyte stores your backup snapshots. All data in a repository is automatically encrypted, compressed, and deduplicated by Restic.
+
+## Supported Repository Backends
+
+Zerobyte supports multiple storage backends for repositories:
+
+- **Local** - Local filesystem storage
+- **S3** - Amazon S3 and S3-compatible storage (MinIO, Wasabi, etc.)
+- **R2** - Cloudflare R2
+- **GCS** - Google Cloud Storage
+- **Azure** - Azure Blob Storage
+- **SFTP** - SSH File Transfer Protocol
+- **REST** - Restic REST server
+- **Rclone** - Any backend supported by rclone
+
+<Note>
+All repositories use end-to-end encryption. Your backup data is encrypted before leaving the Zerobyte server and can only be decrypted with the repository password.
+</Note>
+
+## Creating a Repository
+
+<Steps>
+  <Step title="Navigate to Repositories">
+    Open the Zerobyte web interface and click **Repositories** in the sidebar.
+  </Step>
+
+  <Step title="Create New Repository">
+    Click the **Add Repository** button.
+  </Step>
+
+  <Step title="Configure Basic Settings">
+    - **Name**: A descriptive name for the repository (e.g., "AWS S3 Backups")
+    - **Backend Type**: Select your storage backend
+    - **Compression Mode**: Choose compression level (off, auto, or max)
+  </Step>
+
+  <Step title="Choose Repository Mode">
+    Select whether to create a new repository or connect to an existing one:
+    
+    - **New Repository**: Initialize a fresh repository (recommended)
+    - **Existing Repository**: Connect to a repository created outside Zerobyte
+    
+    <Warning>
+    If connecting to an existing repository, you must provide the exact password used when it was created.
+    </Warning>
+  </Step>
+
+  <Step title="Configure Backend Settings">
+    Fill in the connection details based on your selected backend type. See the sections below for type-specific configuration.
+  </Step>
+
+  <Step title="Set Repository Password">
+    - **Auto-generated**: Zerobyte creates a random password (recommended)
+    - **Custom Password**: Provide your own password
+    
+    <Tip>
+    Store your repository password securely. You'll need it to restore backups outside of Zerobyte or if you need to migrate your data.
+    </Tip>
+  </Step>
+
+  <Step title="Configure Advanced Options (Optional)">
+    - **Upload Bandwidth Limit**: Throttle upload speed (Kbps, Mbps, or Gbps)
+    - **Download Bandwidth Limit**: Throttle download speed
+    - **Custom CA Certificate**: For self-signed SSL certificates
+    - **Insecure TLS**: Skip TLS certificate verification (not recommended)
+  </Step>
+
+  <Step title="Create Repository">
+    Click **Create Repository**. For new repositories, Zerobyte will initialize the repository structure.
+  </Step>
+</Steps>
+
+## Repository Backend Configuration
+
+### Local
+
+Store backups on the local filesystem or network-mounted storage.
+
+**Configuration:**
+- **Path**: Absolute path to the repository directory (e.g., `/backup-repo`)
+
+**Example:**
+```
+Path: /mnt/backup-storage/zerobyte-repo
+```
+
+<Warning>
+For local repositories, ensure the path is on a different physical drive than the source data. Consider using network storage or external drives for better disaster recovery.
+</Warning>
+
+### S3
+
+Amazon S3 or S3-compatible storage providers.
+
+**Configuration:**
+- **Endpoint**: S3 endpoint URL (e.g., `s3.amazonaws.com` or `s3.us-west-2.amazonaws.com`)
+- **Bucket**: S3 bucket name
+- **Access Key ID**: AWS access key ID
+- **Secret Access Key**: AWS secret access key
+
+**Example for AWS S3:**
+```
+Endpoint: s3.us-east-1.amazonaws.com
+Bucket: my-zerobyte-backups
+Access Key ID: AKIAIOSFODNN7EXAMPLE
+Secret Access Key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+```
+
+**Example for MinIO:**
+```
+Endpoint: minio.example.com:9000
+Bucket: backups
+Access Key ID: minioadmin
+Secret Access Key: minioadmin
+```
+
+<Tip>
+For S3-compatible services like MinIO, Wasabi, or DigitalOcean Spaces, use their specific endpoint URLs.
+</Tip>
+
+### R2
+
+Cloudflare R2 object storage.
+
+**Configuration:**
+- **Endpoint**: R2 endpoint from your Cloudflare dashboard
+- **Bucket**: R2 bucket name
+- **Access Key ID**: R2 access key ID
+- **Secret Access Key**: R2 secret access key
+
+**Example:**
+```
+Endpoint: https://abc123.r2.cloudflarestorage.com
+Bucket: zerobyte-backups
+Access Key ID: your-r2-access-key-id
+Secret Access Key: your-r2-secret-access-key
+```
+
+### GCS
+
+Google Cloud Storage.
+
+**Configuration:**
+- **Bucket**: GCS bucket name
+- **Project ID**: Google Cloud project ID
+- **Credentials JSON**: Service account credentials in JSON format
+
+**Example:**
+```
+Bucket: zerobyte-backups
+Project ID: my-project-123456
+Credentials JSON: {"type": "service_account", ...}
+```
+
+<Tip>
+Create a service account with "Storage Object Admin" role and download the JSON key file.
+</Tip>
+
+### Azure
+
+Microsoft Azure Blob Storage.
+
+**Configuration:**
+- **Container**: Azure blob container name
+- **Account Name**: Storage account name
+- **Account Key**: Storage account access key
+- **Endpoint Suffix**: Azure cloud endpoint (optional, defaults to `core.windows.net`)
+
+**Example:**
+```
+Container: zerobyte-backups
+Account Name: mystorageaccount
+Account Key: abc123...xyz789
+```
+
+### SFTP
+
+Store backups on a remote server via SSH.
+
+**Configuration:**
+- **Host**: SFTP server hostname or IP
+- **Port**: SSH port (default: 22)
+- **User**: SSH username
+- **Path**: Remote directory path for the repository
+- **Private Key**: SSH private key for authentication
+- **Skip Host Key Check**: Disable strict host key checking (default: enabled)
+- **Known Hosts**: Custom known_hosts file content (optional)
+
+**Example:**
+```
+Host: backup.example.com
+Port: 22
+User: backup-user
+Path: /home/backup-user/zerobyte-repo
+Private Key: -----BEGIN OPENSSH PRIVATE KEY-----...
+```
+
+### REST
+
+Restic REST server for efficient backup storage.
+
+**Configuration:**
+- **URL**: REST server URL (e.g., `http://localhost:8000/`)
+- **Username**: Authentication username (optional)
+- **Password**: Authentication password (optional)
+- **Path**: Repository path on the server (optional)
+
+**Example:**
+```
+URL: https://rest.example.com:8000/
+Username: backup-user
+Password: secure-password
+Path: /zerobyte
+```
+
+### Rclone
+
+Use any rclone-supported backend (Google Drive, Dropbox, OneDrive, etc.).
+
+**Prerequisites:**
+- Configure rclone remotes on the host system or mount the rclone config directory
+
+**Configuration:**
+- **Remote**: Name of the configured rclone remote
+- **Path**: Path within the remote for the repository
+
+**Example:**
+```
+Remote: gdrive
+Path: /Backups/zerobyte-repo
+```
+
+## Compression Modes
+
+Choose the appropriate compression mode for your use case:
+
+- **Off**: No compression (fastest, largest storage)
+- **Auto**: Automatic compression based on file type (recommended)
+- **Max**: Maximum compression (slowest, smallest storage)
+
+<Tip>
+Use **auto** for most cases. Restic intelligently skips compression for already-compressed files (images, videos, archives).
+</Tip>
+
+## Bandwidth Limiting
+
+Control upload and download speeds to avoid saturating your network connection.
+
+**Configuration:**
+1. Enable the bandwidth limit
+2. Set the value (e.g., 10)
+3. Choose the unit (Kbps, Mbps, or Gbps)
+
+**Example:**
+```
+Upload Limit: Enabled
+Value: 50
+Unit: Mbps
+```
+
+## Using Secret References
+
+Instead of storing credentials in the database, reference them from environment variables or Docker secrets.
+
+**Syntax:**
+- `env://VAR_NAME` - Read from environment variable
+- `file://SECRET_NAME` - Read from `/run/secrets/SECRET_NAME`
+
+**Example for S3:**
+```
+Access Key ID: env://S3_ACCESS_KEY
+Secret Access Key: env://S3_SECRET_KEY
+```
+
+In `docker-compose.yml`:
+```yaml
+environment:
+  - S3_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE
+  - S3_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+```
+
+## Managing Repositories
+
+### Repository Health
+
+Zerobyte periodically checks repository health and displays the status:
+
+- **Healthy** (green): Repository is accessible and functioning
+- **Error** (red): Connection or integrity issue detected
+- **Unknown** (gray): Health status not yet determined
+
+### Repository Statistics
+
+View storage usage, compression ratio, and snapshot count by clicking on a repository.
+
+### Repository Doctor
+
+If a repository shows errors, use the **Doctor** function to:
+1. Unlock stale locks
+2. Check repository integrity
+3. Repair index files
+
+<Steps>
+  <Step title="Start Doctor">
+    Click **Run Doctor** on the repository details page.
+  </Step>
+  
+  <Step title="Monitor Progress">
+    The doctor operation runs asynchronously and shows real-time progress.
+  </Step>
+  
+  <Step title="Review Results">
+    Check the doctor results to see which fixes were applied.
+  </Step>
+</Steps>
+
+### Unlocking Repositories
+
+If backups fail with "repository is locked" errors, you can manually unlock the repository:
+
+1. Navigate to the repository details
+2. Click **Unlock Repository**
+3. Confirm the action
+
+<Warning>
+Only unlock a repository if you're certain no backup operations are currently running. Unlocking an active repository can cause data corruption.
+</Warning>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use 3-2-1 backup strategy">
+    - Keep **3** copies of your data
+    - Store on **2** different media types
+    - Keep **1** copy offsite
+    
+    Create multiple repositories using different backends (e.g., one local, one cloud) and use mirror functionality.
+  </Accordion>
+
+  <Accordion title="Secure your repository passwords">
+    - Store passwords in a password manager
+    - Use strong, randomly generated passwords
+    - Don't reuse passwords across repositories
+    - Keep offline backups of repository passwords
+  </Accordion>
+
+  <Accordion title="Monitor repository health">
+    - Set up notifications for repository errors
+    - Regularly check repository statistics
+    - Test restores periodically to verify backup integrity
+  </Accordion>
+
+  <Accordion title="Optimize storage costs">
+    - Use lifecycle policies on cloud storage to move old data to cheaper tiers
+    - Configure appropriate retention policies to limit storage growth
+    - Use "auto" compression mode for best size/speed balance
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Repository initialization fails">
+    - Verify credentials and permissions
+    - For S3/GCS/Azure, ensure the bucket/container exists
+    - Check network connectivity to the storage backend
+    - Review error messages in the repository details
+  </Accordion>
+
+  <Accordion title="Authentication errors">
+    - Double-check access keys and passwords
+    - Verify secret references resolve correctly
+    - For cloud providers, check IAM/RBAC permissions
+  </Accordion>
+
+  <Accordion title="SSL/TLS certificate errors">
+    - For self-signed certificates, provide the CA certificate
+    - As a last resort, enable "Insecure TLS" (not recommended for production)
+  </Accordion>
+
+  <Accordion title="Cannot connect to existing repository">
+    - Verify the password matches exactly
+    - Ensure the repository was created with Restic
+    - Check that the backend configuration points to the correct location
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Add Volumes" icon="folder" href="/guides/adding-volumes">
+    Configure data sources to back up
+  </Card>
+  
+  <Card title="Create Backup Jobs" icon="clock" href="/guides/backup-jobs">
+    Schedule automated backups from volumes to repositories
+  </Card>
+</CardGroup>

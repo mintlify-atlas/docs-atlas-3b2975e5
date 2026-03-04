@@ -1,0 +1,348 @@
+---
+title: Authentication
+description: Session-based authentication endpoints and flows
+---
+
+Zerobyte uses **better-auth** for session-based authentication with support for email/password, SSO, two-factor authentication, and organization management.
+
+## Authentication Flow
+
+### Email/Password Authentication
+
+1. Check if any users exist using **Get Status**
+2. Sign in with email and password via better-auth endpoint
+3. Complete 2FA verification if enabled
+4. Session cookie is automatically set
+
+### SSO Authentication
+
+1. List available SSO providers
+2. Initiate SSO flow via better-auth
+3. Complete provider authentication
+4. Session cookie is automatically set
+
+## Better-Auth Endpoints
+
+Zerobyte uses better-auth for core authentication operations. These endpoints are available at `/api/auth/*`:
+
+### Sign In
+```bash
+POST /api/auth/sign-in/email
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "your-password"
+}
+```
+
+### Sign Up
+```bash
+POST /api/auth/sign-up/email
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "your-password",
+  "username": "johndoe"
+}
+```
+
+**Note:** Registration may be disabled by administrators. Check registration status first.
+
+### Sign Out
+```bash
+POST /api/auth/sign-out
+```
+
+### Two-Factor Authentication
+
+**Enable 2FA:**
+```bash
+POST /api/auth/two-factor/enable
+```
+
+**Verify 2FA:**
+```bash
+POST /api/auth/two-factor/verify
+Content-Type: application/json
+
+{
+  "code": "123456"
+}
+```
+
+**Disable 2FA:**
+```bash
+POST /api/auth/two-factor/disable
+Content-Type: application/json
+
+{
+  "password": "your-password"
+}
+```
+
+## Zerobyte Auth Endpoints
+
+### Get Status
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/auth/status
+```
+</CodeGroup>
+
+Check if any users exist in the system (used to determine if initial setup is needed).
+
+**Response:**
+
+<ResponseField name="hasUsers" type="boolean">
+  Whether any users exist in the system
+</ResponseField>
+
+### Get SSO Providers
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/auth/sso-providers
+```
+</CodeGroup>
+
+List all public SSO providers configured for the instance.
+
+**Response:**
+
+<ResponseField name="providers" type="array">
+  Array of SSO provider configurations
+  <Expandable>
+    <ResponseField name="providerId" type="string">
+      Unique identifier for the SSO provider
+    </ResponseField>
+    <ResponseField name="organizationSlug" type="string">
+      Organization slug for the provider
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Get SSO Settings
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/auth/sso-settings \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get SSO providers and invitations for the active organization. Requires organization admin role.
+
+**Response:**
+
+<ResponseField name="providers" type="array">
+  SSO providers configured for the organization
+  <Expandable>
+    <ResponseField name="providerId" type="string">
+      Provider unique identifier
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      SSO provider type (e.g., "oidc", "saml")
+    </ResponseField>
+    <ResponseField name="issuer" type="string">
+      Identity provider issuer URL
+    </ResponseField>
+    <ResponseField name="domain" type="string">
+      Email domain for auto-linking
+    </ResponseField>
+    <ResponseField name="autoLinkMatchingEmails" type="boolean">
+      Whether to auto-link accounts with matching emails
+    </ResponseField>
+    <ResponseField name="organizationId" type="string | null">
+      Organization ID this provider belongs to
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="invitations" type="array">
+  Pending SSO invitations
+  <Expandable>
+    <ResponseField name="id" type="string">
+      Invitation ID
+    </ResponseField>
+    <ResponseField name="email" type="string">
+      Invited user email
+    </ResponseField>
+    <ResponseField name="role" type="string">
+      Assigned role ("member" or "admin")
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Invitation status
+    </ResponseField>
+    <ResponseField name="expiresAt" type="string">
+      ISO 8601 expiration timestamp
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Delete SSO Provider
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:4096/api/v1/auth/sso-providers/{providerId} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Delete an SSO provider. Requires organization admin role.
+
+**Parameters:**
+
+<ParamField path="providerId" type="string" required>
+  SSO provider ID to delete
+</ParamField>
+
+**Response:**
+
+<ResponseField name="success" type="boolean">
+  Whether the deletion was successful
+</ResponseField>
+
+### Update SSO Provider Auto-Linking
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH http://localhost:4096/api/v1/auth/sso-providers/{providerId}/auto-linking \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true
+  }'
+```
+</CodeGroup>
+
+Update whether SSO sign-in can auto-link existing accounts by email.
+
+**Parameters:**
+
+<ParamField path="providerId" type="string" required>
+  SSO provider ID
+</ParamField>
+
+<ParamField body="enabled" type="boolean" required>
+  Whether to enable auto-linking
+</ParamField>
+
+### Get Admin Users
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/auth/admin-users \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+List all users for admin management. Requires global admin role.
+
+**Response:**
+
+<ResponseField name="users" type="array">
+  Array of user objects
+  <Expandable>
+    <ResponseField name="id" type="string">
+      User ID
+    </ResponseField>
+    <ResponseField name="name" type="string | null">
+      User display name
+    </ResponseField>
+    <ResponseField name="email" type="string">
+      User email address
+    </ResponseField>
+    <ResponseField name="role" type="string">
+      User role ("user" or "admin")
+    </ResponseField>
+    <ResponseField name="banned" type="boolean">
+      Whether the user is banned
+    </ResponseField>
+    <ResponseField name="accounts" type="array">
+      Linked authentication accounts
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Total number of users
+</ResponseField>
+
+### Get Organization Members
+
+<CodeGroup>
+```bash cURL
+curl -X GET http://localhost:4096/api/v1/auth/org-members \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Get members of the active organization. Requires organization admin role.
+
+**Response:**
+
+<ResponseField name="members" type="array">
+  Organization members
+  <Expandable>
+    <ResponseField name="id" type="string">
+      Member ID
+    </ResponseField>
+    <ResponseField name="userId" type="string">
+      User ID
+    </ResponseField>
+    <ResponseField name="role" type="string">
+      Organization role ("member" or "admin")
+    </ResponseField>
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 timestamp
+    </ResponseField>
+    <ResponseField name="user" type="object">
+      User information
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Update Member Role
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH http://localhost:4096/api/v1/auth/org-members/{memberId}/role \
+  -H "Cookie: zerobyte.session=..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "role": "admin"
+  }'
+```
+</CodeGroup>
+
+Update a member's role in the organization.
+
+**Parameters:**
+
+<ParamField path="memberId" type="string" required>
+  Member ID
+</ParamField>
+
+<ParamField body="role" type="string" required>
+  New role: "member" or "admin"
+</ParamField>
+
+### Remove Organization Member
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE http://localhost:4096/api/v1/auth/org-members/{memberId} \
+  -H "Cookie: zerobyte.session=..."
+```
+</CodeGroup>
+
+Remove a member from the organization. Cannot remove the organization owner.
+
+**Parameters:**
+
+<ParamField path="memberId" type="string" required>
+  Member ID to remove
+</ParamField>

@@ -1,0 +1,270 @@
+---
+title: "Adding Volumes"
+description: "Step-by-step guide to adding and configuring data sources in Zerobyte"
+---
+
+Volumes are the data sources that Zerobyte will back up. They represent remote or local storage locations that you want to protect with automated backups.
+
+## Supported Volume Types
+
+Zerobyte supports multiple volume backends:
+
+- **Directory** - Local filesystem directories
+- **NFS** - Network File System shares
+- **SMB** - Server Message Block (CIFS) shares
+- **WebDAV** - Web-based Distributed Authoring and Versioning
+- **SFTP** - SSH File Transfer Protocol
+- **Rclone** - Any storage backend supported by rclone
+
+<Note>
+To use network volume types (NFS, SMB, WebDAV, SFTP), your Docker container must run with `SYS_ADMIN` capability and access to `/dev/fuse`. See the [Installation](/installation) guide for details.
+</Note>
+
+## Adding a Volume
+
+<Steps>
+  <Step title="Navigate to Volumes">
+    Open the Zerobyte web interface and click **Volumes** in the sidebar.
+  </Step>
+
+  <Step title="Create New Volume">
+    Click the **Add Volume** button in the top right corner.
+  </Step>
+
+  <Step title="Configure Basic Settings">
+    Enter a descriptive name for your volume. This name will be used when creating backup schedules.
+    
+    <Tip>Use clear, descriptive names like "Media Server" or "User Documents" to easily identify volumes later.</Tip>
+  </Step>
+
+  <Step title="Select Volume Type">
+    Choose the appropriate backend type based on where your data is located.
+  </Step>
+
+  <Step title="Configure Backend Settings">
+    Fill in the connection details based on your selected volume type. See the sections below for type-specific configuration.
+  </Step>
+
+  <Step title="Test Connection (Optional)">
+    Click **Test Connection** to verify that Zerobyte can successfully connect to your volume before saving.
+  </Step>
+
+  <Step title="Save Volume">
+    Click **Create Volume** to save your configuration. The volume will be automatically mounted.
+  </Step>
+</Steps>
+
+## Volume Type Configuration
+
+### Directory
+
+Local filesystem directories are the simplest volume type to configure.
+
+**Configuration:**
+- **Path**: Absolute path to the directory (e.g., `/mnt/data` or `/mydata`)
+- **Read Only**: Enable to prevent accidental modifications (optional)
+
+<Warning>
+The path must be accessible from inside the Docker container. Mount it as a volume in your `docker-compose.yml`:
+```yaml
+volumes:
+  - /path/on/host:/mydata
+```
+</Warning>
+
+### NFS
+
+Network File System shares from NAS devices or file servers.
+
+**Configuration:**
+- **Server**: NFS server hostname or IP address
+- **Export Path**: The NFS export path (e.g., `/volume1/share`)
+- **Port**: NFS port (default: 2049)
+- **Version**: NFS protocol version (3, 4, or 4.1)
+- **Read Only**: Mount as read-only (optional)
+
+**Example:**
+```
+Server: 192.168.1.100
+Export Path: /volume1/media
+Port: 2049
+Version: 4.1
+```
+
+### SMB
+
+Windows file shares and Samba servers.
+
+**Configuration:**
+- **Server**: SMB server hostname or IP address
+- **Share**: Share name (without leading slashes)
+- **Username**: Authentication username (optional for guest access)
+- **Password**: Authentication password (optional for guest access)
+- **Guest**: Enable for anonymous access
+- **Version**: SMB protocol version (1.0, 2.0, 2.1, 3.0, or auto)
+- **Domain**: Windows domain name (optional)
+- **Port**: SMB port (default: 445)
+- **Read Only**: Mount as read-only (optional)
+
+**Example:**
+```
+Server: nas.local
+Share: backups
+Username: backup-user
+Version: auto
+Port: 445
+```
+
+<Tip>
+Use `auto` for the version to let the system negotiate the best protocol version automatically.
+</Tip>
+
+### WebDAV
+
+Web-based file storage including Nextcloud, ownCloud, and WebDAV servers.
+
+**Configuration:**
+- **Server**: WebDAV server hostname or IP
+- **Path**: Path on the server (e.g., `/remote.php/dav/files/username/`)
+- **Port**: HTTP/HTTPS port (default: 80 for HTTP, 443 for HTTPS)
+- **Username**: Authentication username (optional)
+- **Password**: Authentication password (optional)
+- **SSL**: Enable for HTTPS connections
+- **Read Only**: Mount as read-only (optional)
+
+**Example for Nextcloud:**
+```
+Server: cloud.example.com
+Path: /remote.php/dav/files/john/Documents
+Port: 443
+SSL: Enabled
+Username: john
+```
+
+### SFTP
+
+Secure file transfer over SSH.
+
+**Configuration:**
+- **Host**: SFTP server hostname or IP address
+- **Port**: SSH port (default: 22)
+- **Username**: SSH username
+- **Password**: SSH password (optional if using private key)
+- **Private Key**: SSH private key for authentication (optional)
+- **Path**: Remote directory path
+- **Skip Host Key Check**: Disable strict host key checking (default: enabled)
+- **Known Hosts**: Custom known_hosts file content (optional)
+- **Read Only**: Mount as read-only (optional)
+
+**Example:**
+```
+Host: server.example.com
+Port: 22
+Username: backup
+Path: /home/backup/data
+Skip Host Key Check: true
+```
+
+<Warning>
+For production environments, disable "Skip Host Key Check" and provide the server's host key in the "Known Hosts" field to prevent man-in-the-middle attacks.
+</Warning>
+
+### Rclone
+
+Connect to any storage backend supported by rclone, including Google Drive, Dropbox, OneDrive, and more.
+
+**Prerequisites:**
+- Configure rclone remotes on the host system or mount the rclone config directory into the container
+
+**Configuration:**
+- **Remote**: Name of the configured rclone remote
+- **Path**: Path within the remote (e.g., `/backups`)
+- **Read Only**: Mount as read-only (optional)
+
+**Example:**
+```
+Remote: gdrive
+Path: /MyBackups
+```
+
+<Tip>
+To list available rclone remotes, you can use the API or check your rclone configuration file.
+</Tip>
+
+## Managing Volumes
+
+### Auto-Remount
+
+Volumes support automatic remounting if the connection is lost. Enable this in the volume settings to ensure continuous backup availability.
+
+### Health Checks
+
+Zerobyte periodically checks volume health. View the volume status in the Volumes list:
+
+- **Mounted** (green): Volume is accessible
+- **Unmounted** (gray): Volume is not mounted
+- **Error** (red): Connection issue detected
+
+### Browsing Volume Contents
+
+Click on a volume to browse its contents and verify the connection is working correctly.
+
+## Using Secret References
+
+For enhanced security, you can reference secrets stored in environment variables or Docker secrets instead of storing them directly in the database.
+
+**Syntax:**
+- `env://VAR_NAME` - Read from environment variable
+- `file://SECRET_NAME` - Read from `/run/secrets/SECRET_NAME`
+
+**Example:**
+```
+Password: env://NAS_PASSWORD
+```
+
+Then add to your `docker-compose.yml`:
+```yaml
+environment:
+  - NAS_PASSWORD=your_secure_password
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Volume fails to mount">
+    - Verify network connectivity to the remote server
+    - Check credentials are correct
+    - Ensure the Docker container has `SYS_ADMIN` capability and `/dev/fuse` device access
+    - Review container logs for detailed error messages
+  </Accordion>
+
+  <Accordion title="Permission denied errors">
+    - Verify the user has read access to the remote share
+    - For NFS, check export permissions on the server
+    - For SMB, ensure the user has appropriate share and filesystem permissions
+  </Accordion>
+
+  <Accordion title="Cannot browse volume contents">
+    - Ensure the volume is in "Mounted" status
+    - Check that the specified path exists on the remote system
+    - Verify filesystem permissions allow directory listing
+  </Accordion>
+
+  <Accordion title="Connection timeout">
+    - Verify network connectivity (ping the server)
+    - Check firewall rules allow traffic on the required ports
+    - For NFS/SMB, ensure the server is configured to accept connections from the container's IP
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Repositories" icon="database" href="/guides/creating-repositories">
+    Set up encrypted storage destinations for your backups
+  </Card>
+  
+  <Card title="Configure Backups" icon="clock" href="/guides/backup-jobs">
+    Schedule automated backup jobs for your volumes
+  </Card>
+</CardGroup>
